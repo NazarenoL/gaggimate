@@ -704,7 +704,7 @@ void WebUIPlugin::handleCoreDumpDownload(AsyncWebServerRequest *request) {
         return;
     }
 
-    ESP_LOGI("WebUIPlugin", "Streaming core dump: %d bytes from 0x%x", coreSize, coreAddr);
+    ESP_LOGI("WebUIPlugin", "Streaming core dump: %zu bytes from 0x%zx", coreSize, coreAddr);
 
     // Create a streaming response
     AsyncWebServerResponse *response =
