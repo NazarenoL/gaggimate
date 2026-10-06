@@ -1,0 +1,60 @@
+name: Build custom firmware
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "New version tag, higher than the installed firmware (e.g. v1.9.1-photos1)"
+        required: true
+        type: string
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate and tag version
+        env:
+          CUSTOM_VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os, re, subprocess
+          version = os.environ['CUSTOM_VERSION']
+          if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:[-][A-Za-z0-9]+)*)?', version):
+              raise SystemExit('Expected a semantic version beginning with v')
+          subprocess.run(['git', 'tag', version], check=True)
+          PY
+          mkdir -p out
+          printf '%s\n' "$CUSTOM_VERSION" > out/version.txt
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Build embedded web UI
+        run: scripts/build_webui.sh
+      - name: Build display and controller
+        run: |
+          pio run -e display -e controller
+          cp .pio/build/display/firmware.bin out/display-firmware.bin
+          cp .pio/build/controller/firmware.bin out/board-firmware.bin
+          cp .pio/build/display/bootloader.bin out/display-bootloader.bin
+          cp .pio/build/display/partitions.bin out/display-partitions.bin
+          cp .pio/build/controller/bootloader.bin out/board-bootloader.bin
+          cp .pio/build/controller/partitions.bin out/board-partitions.bin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: custom-firmware
+          path: out/*
+      - name: Publish release in this fork
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CUSTOM_VERSION: ${{ inputs.version }}
+        run: |
+          git push origin "$CUSTOM_VERSION"
+          gh release create "$CUSTOM_VERSION" out/* --title "Custom firmware $CUSTOM_VERSION" --notes 'Custom standby photos. See docs/custom-standby-photos.md for installation and OTA instructions.' --latest

@@ -3,6 +3,7 @@ import { faEye } from '@fortawesome/free-solid-svg-icons/faEye';
 import { faEyeSlash } from '@fortawesome/free-solid-svg-icons/faEyeSlash';
 import { timezones } from '../../../config/zones.js';
 import { DASHBOARD_LAYOUTS } from '../../../utils/dashboardManager.js';
+import StandbyPhoto from './StandbyPhoto.jsx';
 import Section from '../../../components/Card.jsx';
 import { WarningIcon } from '../../../components/WarningIcon.jsx';
 import { WARNING_LEVELS, WARNINGS } from '../../../utils/warnings.js';
@@ -323,6 +324,7 @@ export function GeneralTab({
         </div>
 
         {/* Standby Display */}
+        <StandbyPhoto />
         <div className='border-base-content/5 mt-6 border-t pt-6'>
           <div className='mb-4'>
             <ToggleField

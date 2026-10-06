@@ -537,6 +537,12 @@ void AsyncWebServer::dispatch(Conn &c, AsyncWebServerRequest &req) {
     for (auto &r : _routes) {
         const bool uriMatch = r._prefix ? path.rfind(r._uri, 0) == 0 : r._uri == path;
         if ((r._method == HTTP_ANY || (r._method & req._method)) && uriMatch && (!r._filter || r._filter(&req))) {
+            if (r._bodyHandler && !req._body.empty()) {
+                const size_t total = req._body.size();
+                for (size_t offset = 0; offset < total; offset += 4096)
+                    r._bodyHandler(&req, reinterpret_cast<uint8_t *>(&req._body[offset]), std::min(size_t(4096), total - offset),
+                                   offset, total);
+            }
             r._handler(&req);
             return;
         }

@@ -5,6 +5,8 @@
 #include <display/core/process/BrewProcess.h>
 #include <display/core/process/Process.h>
 #include <display/core/zones.h>
+#include <display/util/StandbyPhoto.h>
+#include <esp32-hal-psram.h>
 #ifndef GAGGIMATE_SIM // hardware panel drivers are device-only
 #include <display/drivers/AmoledDisplayDriver.h>
 #include <display/drivers/LilyGoDriver.h>
@@ -274,6 +276,7 @@ void DefaultUI::loop() {
     }
 
     ui_tick();
+    updateStandbyPhoto();
     lv_task_handler();
 }
 
@@ -785,4 +788,48 @@ void DefaultUI::profileLoopTask(void *arg) {
         ui->loopProfiles();
         vTaskDelay(25 / portTICK_PERIOD_MS);
     }
+}
+
+// Only the UI task touches LVGL and its image buffer. Network callbacks publish
+// a revision after saving, so there is no cross-task LVGL access.
+void DefaultUI::updateStandbyPhoto() {
+    const uint32_t revision = StandbyPhoto::revision.load();
+    if (revision != standbyPhotoRevision) {
+        if (!standbyPhotoPixels && LittleFS.exists(StandbyPhoto::PATH))
+            standbyPhotoPixels = static_cast<uint8_t *>(ps_malloc(StandbyPhoto::BYTES));
+        lv_img_cache_invalidate_src(&standbyPhotoDescriptor);
+        standbyPhotoLoaded = standbyPhotoPixels && StandbyPhoto::load(standbyPhotoPixels);
+        standbyPhotoDescriptor.header.cf = LV_IMG_CF_TRUE_COLOR;
+        standbyPhotoDescriptor.header.w = StandbyPhoto::WIDTH;
+        standbyPhotoDescriptor.header.h = StandbyPhoto::WIDTH;
+        standbyPhotoDescriptor.data_size = StandbyPhoto::BYTES;
+        standbyPhotoDescriptor.data = standbyPhotoPixels;
+        standbyPhotoRevision = revision;
+        if (objects.obj3)
+            lv_obj_invalidate(objects.obj3);
+    }
+    if (!objects.obj3)
+        return;
+    if (!standbyPhotoLoaded) {
+        lv_obj_add_flag(objects.obj3, LV_OBJ_FLAG_HIDDEN);
+        const lv_color_t foreground = lv_color_hex(theme_colors[eez_flow_get_selected_theme_index()][0]);
+        lv_obj_set_style_text_color(objects.time, foreground, 0);
+        lv_obj_set_style_bg_opa(objects.time, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_img_recolor(objects.touch_icon, foreground, 0);
+        return;
+    }
+    if (lv_img_get_src(objects.obj3) != &standbyPhotoDescriptor) {
+        lv_img_set_src(objects.obj3, &standbyPhotoDescriptor);
+        lv_img_set_zoom(objects.obj3, 256);
+        lv_obj_set_style_img_recolor_opa(objects.obj3, LV_OPA_TRANSP, 0);
+        lv_obj_clear_flag(objects.obj3, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_move_background(objects.obj3);
+    }
+    lv_obj_clear_flag(objects.obj3, LV_OBJ_FLAG_HIDDEN);
+    // Keep the clock readable over light photos in either theme.
+    lv_obj_set_style_text_color(objects.time, lv_color_white(), 0);
+    lv_obj_set_style_bg_color(objects.time, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(objects.time, LV_OPA_60, 0);
+    lv_obj_set_style_radius(objects.time, 8, 0);
+    lv_obj_set_style_img_recolor(objects.touch_icon, lv_color_white(), 0);
 }

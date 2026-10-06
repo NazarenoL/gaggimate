@@ -66,6 +66,12 @@ class DefaultUI {
     }
 
   private:
+    void updateStandbyPhoto();
+    lv_img_dsc_t standbyPhotoDescriptor{};
+    uint8_t *standbyPhotoPixels = nullptr;
+    uint32_t standbyPhotoRevision = UINT32_MAX;
+    bool standbyPhotoLoaded = false;
+
     void setupPanel();
     void setupState();
 

@@ -72,6 +72,14 @@ class AsyncWebServerRequest {
   public:
     AsyncWebServerRequest(int fd, AsyncWebServer *server) : _fd(fd), _server(server) {}
 
+    void *_tempObject = nullptr;
+    std::function<void()> _disconnect;
+    void onDisconnect(std::function<void()> callback) { _disconnect = std::move(callback); }
+    ~AsyncWebServerRequest() {
+        if (_disconnect)
+            _disconnect();
+    }
+
     const String &url() const { return _url; }
     int method() const { return _method; }
     bool hasArg(const char *name) const { return _args.count(name) > 0; }
@@ -165,6 +173,7 @@ class AsyncCallbackWebHandler {
     std::string _uri;
     ArRequestHandlerFunction _handler;
     bool _prefix = false;
+    std::function<void(AsyncWebServerRequest *, uint8_t *, size_t, size_t, size_t)> _bodyHandler;
     ArRequestFilterFunction _filter;
 };
 
@@ -180,6 +189,11 @@ class AsyncWebServer {
     AsyncCallbackWebHandler &on(const AsyncURIMatcher &matcher, WebRequestMethod method, ArRequestHandlerFunction handler) {
         _routes.push_back({(int)method, matcher.uri, std::move(handler), true});
         return _routes.back();
+    }
+    void on(const char *uri, WebRequestMethod method, ArRequestHandlerFunction handler, std::nullptr_t,
+            std::function<void(AsyncWebServerRequest *, uint8_t *, size_t, size_t, size_t)> body) {
+        _routes.push_back({(int)method, uri, std::move(handler)});
+        _routes.back()._bodyHandler = std::move(body);
     }
     void onNotFound(ArRequestHandlerFunction handler) { _notFound = std::move(handler); }
     void addHandler(AsyncWebSocket *ws) { _ws = ws; }

@@ -8,6 +8,7 @@
 #include <display/models/profile.h>
 #include <display/plugins/BLEScalePlugin.h>
 #include <display/plugins/ShotHistoryPlugin.h>
+#include <display/util/StandbyPhoto.h>
 #include <display/webassets/web_ui_manifest.h>
 #include <esp32-hal-psram.h>
 #include <esp_core_dump.h>
@@ -15,6 +16,7 @@
 #include <esp_heap_caps.h>
 #include <esp_partition.h>
 #include <mbedtls/platform.h>
+#include <memory>
 #include <vector>
 #include <version.h>
 
@@ -168,6 +170,73 @@ void WebUIPlugin::setupServer() {
               [](AsyncWebServerRequest *request) { request->redirect(LOCAL_URL); });       // firefox captive portal call home
     server.on("/success.txt", [](AsyncWebServerRequest *request) { request->send(200); }); // firefox captive portal call home
     server.on("/ncsi.txt", [](AsyncWebServerRequest *request) { request->redirect(LOCAL_URL); }); // windows call home
+    server.on("/api/standby-photo", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        if (controller->isUpdating()) {
+            request->send(409, "text/plain", "Firmware update in progress");
+            return;
+        }
+        if (!LittleFS.exists(StandbyPhoto::PATH)) {
+            request->send(404, "text/plain", "No standby photo");
+            return;
+        }
+        request->send(LittleFS, StandbyPhoto::PATH, "application/octet-stream");
+    });
+    server.on("/api/standby-photo", HTTP_DELETE, [this](AsyncWebServerRequest *request) {
+        if (controller->isUpdating()) {
+            request->send(409, "text/plain", "Firmware update in progress");
+            return;
+        }
+        request->send(StandbyPhoto::remove() ? 200 : 507, "text/plain", "");
+    });
+    // Request-owned PSRAM buffer: disconnect also releases partial uploads.
+    struct PhotoUpload {
+        uint8_t *pixels = nullptr;
+        size_t received = 0;
+        int status = 200;
+        ~PhotoUpload() { free(pixels); }
+    };
+    server.on(
+        "/api/standby-photo", HTTP_POST,
+        [this](AsyncWebServerRequest *request) {
+            auto *upload = static_cast<PhotoUpload *>(request->_tempObject);
+            request->_tempObject = nullptr; // The disconnect callback owns the upload lifetime.
+            if (!upload || upload->status != 200 || upload->received != StandbyPhoto::BYTES) {
+                request->send(upload && upload->status != 200 ? upload->status : 400, "text/plain",
+                              "Incomplete or invalid photo upload");
+                return;
+            }
+            if (controller->isUpdating()) {
+                request->send(409, "text/plain", "Firmware update in progress");
+                return;
+            }
+            request->send(StandbyPhoto::save(upload->pixels) ? 200 : 507, "text/plain", "");
+        },
+        nullptr,
+        [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+            if (index == 0) {
+                auto upload = std::make_shared<PhotoUpload>();
+                if (total != StandbyPhoto::BYTES)
+                    upload->status = 413;
+                else if (controller->isUpdating())
+                    upload->status = 409;
+                else {
+                    upload->pixels = static_cast<uint8_t *>(ps_malloc(StandbyPhoto::BYTES));
+                    if (!upload->pixels)
+                        upload->status = 503;
+                }
+                request->_tempObject = upload.get();
+                request->onDisconnect([request, upload]() { request->_tempObject = nullptr; });
+            }
+            auto *upload = static_cast<PhotoUpload *>(request->_tempObject);
+            if (!upload || upload->status != 200)
+                return;
+            if (index != upload->received || index > StandbyPhoto::BYTES || len > StandbyPhoto::BYTES - index) {
+                upload->status = 400;
+                return;
+            }
+            memcpy(upload->pixels + index, data, len);
+            upload->received += len;
+        });
     server.on("/api/settings", [this](AsyncWebServerRequest *request) { handleSettings(request); });
     server.on("/api/status", [this](AsyncWebServerRequest *request) {
         AsyncResponseStream *response = request->beginResponseStream("application/json");
