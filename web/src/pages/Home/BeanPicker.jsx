@@ -3,15 +3,19 @@ import { machine } from '../../services/ApiService.js';
 import { useBeans, validGrindSize } from '../../services/beans.js';
 
 export function BeanPicker() {
-  const { beans, selectedId, request, disabled, error } = useBeans();
+  const { beans, selectedId, lastGrindSetting, request, disabled, error } = useBeans();
   const bean = beans.find(item => item.id === selectedId);
   const savedGrind = bean?.grindSetting == null ? '' : Number(bean.grindSetting).toFixed(1);
-  const [grind, setGrind] = useState(savedGrind);
+  const prefilledGrind =
+    bean && lastGrindSetting != null ? Number(lastGrindSetting).toFixed(1) : '';
+  const initialGrind = savedGrind || prefilledGrind;
+  const [draft, setDraft] = useState(null);
+  const grind = draft?.id === selectedId ? draft.value : initialGrind;
   const active = !!machine.value.status.process?.a;
   const changed = grind !== savedGrind;
   const valid = validGrindSize(grind);
 
-  useEffect(() => setGrind(savedGrind), [selectedId, savedGrind]);
+  useEffect(() => setDraft(null), [selectedId, initialGrind]);
 
   return (
     <div className='card bg-base-100 space-y-2 rounded-xl p-3'>
@@ -33,7 +37,7 @@ export function BeanPicker() {
           <option value=''>No beans selected</option>
           {beans.map(item => (
             <option key={item.id} value={item.id}>
-              {item.roaster} — {item.name} ({item.roastDate})
+              {item.roaster} — {item.name}
             </option>
           ))}
         </select>
@@ -57,7 +61,7 @@ export function BeanPicker() {
             value={grind}
             placeholder='6.1'
             disabled={disabled || active || !bean}
-            onInput={event => setGrind(event.target.value)}
+            onInput={event => setDraft({ id: selectedId, value: event.target.value })}
           />
         </label>
         <button

@@ -15,7 +15,7 @@ export function validGrindSize(value) {
 export function useBeans() {
   const api = useContext(ApiServiceContext);
   const connected = machine.value.connected;
-  const [state, setState] = useState({ beans: [], selectedId: '' });
+  const [state, setState] = useState({ beans: [], selectedId: '', lastGrindSetting: null });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [loaded, setLoaded] = useState(false);
@@ -27,7 +27,11 @@ export function useBeans() {
       try {
         const result = await api.request({ tp: `req:beans:${action}`, ...payload });
         if (result.error) throw new Error(result.error);
-        setState({ beans: result.beans || [], selectedId: result.selectedId || '' });
+        setState({
+          beans: result.beans || [],
+          selectedId: result.selectedId || '',
+          lastGrindSetting: result.lastGrindSetting ?? null,
+        });
         setLoaded(true);
         return true;
       } catch (e) {
@@ -47,7 +51,11 @@ export function useBeans() {
 
   useEffect(() => {
     const id = api.on('evt:beans:changed', message => {
-      setState({ beans: message.beans || [], selectedId: message.selectedId || '' });
+      setState({
+        beans: message.beans || [],
+        selectedId: message.selectedId || '',
+        lastGrindSetting: message.lastGrindSetting ?? null,
+      });
     });
     return () => api.off('evt:beans:changed', id);
   }, [api]);

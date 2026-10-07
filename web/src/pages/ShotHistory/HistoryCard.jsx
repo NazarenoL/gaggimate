@@ -253,7 +253,6 @@ export default function HistoryCard({ shot, onDelete, onLoad, onNotesChanged }) 
             {(shotNotes?.beanType || shotNotes?.grindSetting) && (
               <p className='text-base-content/80 text-sm'>
                 {shotNotes.beanType || 'Beans not recorded'}
-                {shotNotes.bean?.roastDate && ` · Roasted ${shotNotes.bean.roastDate}`}
                 {shotNotes.grindSetting && ` · Grind ${shotNotes.grindSetting}`}
               </p>
             )}
