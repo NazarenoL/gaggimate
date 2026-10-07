@@ -36,7 +36,7 @@ The web bundle must be built **before** the firmware, because it is embedded in 
 pio run -e display -t upload --upload-port /dev/ttyACM0
 ```
 
-Replace the port with your actual display port. This uses PlatformIO's bootloader/partition/application upload for the configured board; it does not run `uploadfs` or intentionally erase LittleFS. If the existing partition layout differs, back up profiles/settings first: a layout migration can make existing filesystem data inaccessible. Do not flash the corgi or a fresh filesystem image using `uploadfs` for an ordinary upgrade. The controller can stay on its existing compatible firmware.
+Replace the port with your actual display port. This uses PlatformIO's bootloader/partition/application upload for the configured board; it does not run `uploadfs` or intentionally erase LittleFS. If the existing partition layout differs, back up profiles/settings first: a layout migration can make existing filesystem data inaccessible. Do not flash the corgi or a fresh filesystem image using `uploadfs` for an ordinary upgrade. The controller can stay on its existing firmware only if it uses the same communication protocol (currently protocol 6). If the display reports **Version mismatch, update controller**, install the matching controller build through Settings → System → Stable → Save Channel & Refresh → Update Controller after publishing a fork release. OTA recovery remains available during a protocol mismatch.
 
 ## Publish subsequent OTA builds in your fork
 
@@ -45,7 +45,7 @@ The new **Build custom firmware** workflow (`.github/workflows/custom-firmware.y
 1. Put the workflow and changes on your fork's default branch and enable GitHub Actions if necessary.
 2. In Actions, select **Build custom firmware → Run workflow**. Enter a new tag such as `v1.9.2-custom1` to publish an OTA release (leave blank to build artifacts only), higher than the version installed on the machine. Use a distinct, unused tag each time. Avoid dots within the prerelease suffix because this firmware's version parser does not retain them.
 3. The workflow builds the embedded web UI, display and unchanged controller sources, archives the binaries and publishes a release in **this fork**, marked latest.
-4. In the machine's web UI, select **Settings → System → Stable** and check for updates. Choose **Update Display** for this feature. The controller image is available separately if a future change needs it.
+4. In the machine's web UI, select **Settings → System → Stable** and check for updates. Choose **Update Display** for this feature. If the display reports a protocol version mismatch, choose **Update Controller** to install the matching controller build; the existing display supports OTA recovery in this state.
 
 OTA downloads `display-firmware.bin` (or `board-firmware.bin` for controller updates). It installs only versions considered newer by `lib/OTA/src/common.cpp`; rebuilding under the same version will not offer an update. Nightly fallback additionally reads `version.txt`. GitHub-hosted assets are downloaded over HTTPS, so the machine needs internet access; private repository assets are not supported by the current unauthenticated downloader.
 
