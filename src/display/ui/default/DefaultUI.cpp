@@ -810,9 +810,25 @@ void DefaultUI::updateStandbyPhoto() {
     }
     if (!objects.obj3)
         return;
+    const uint32_t themeIndex = currentThemeMode >= 0 && currentThemeMode < 3 ? currentThemeMode : 0;
+    // A shared opaque backing lets alpha pixels in the icons blend with the
+    // backing rather than revealing the photo. Use white icons over photos in
+    // both themes, and restore the theme colors when the photo is removed.
+    const lv_color_t statusForeground = standbyPhotoLoaded ? lv_color_white() : lv_color_hex(theme_colors[themeIndex][0]);
+    const lv_color_t statusBackground = standbyPhotoLoaded ? lv_color_black() : lv_color_hex(theme_colors[themeIndex][1]);
+    lv_obj_set_style_bg_color(objects.standby_icons, statusBackground, 0);
+    for (lv_obj_t *icon : {objects.wifi_icon, objects.bluetooth_icon, objects.update_icon})
+        lv_obj_set_style_img_recolor(icon, statusForeground, 0);
+    const bool statusVisible = !lv_obj_has_flag(objects.wifi_icon, LV_OBJ_FLAG_HIDDEN) ||
+                               !lv_obj_has_flag(objects.bluetooth_icon, LV_OBJ_FLAG_HIDDEN) ||
+                               !lv_obj_has_flag(objects.update_icon, LV_OBJ_FLAG_HIDDEN);
+    if (statusVisible)
+        lv_obj_clear_flag(objects.standby_icons, LV_OBJ_FLAG_HIDDEN);
+    else
+        lv_obj_add_flag(objects.standby_icons, LV_OBJ_FLAG_HIDDEN);
     if (!standbyPhotoLoaded) {
         lv_obj_add_flag(objects.obj3, LV_OBJ_FLAG_HIDDEN);
-        const lv_color_t foreground = lv_color_hex(theme_colors[eez_flow_get_selected_theme_index()][0]);
+        const lv_color_t foreground = lv_color_hex(theme_colors[themeIndex][0]);
         lv_obj_set_style_text_color(objects.time, foreground, 0);
         lv_obj_set_style_bg_opa(objects.time, LV_OPA_TRANSP, 0);
         lv_obj_set_style_img_recolor(objects.touch_icon, foreground, 0);

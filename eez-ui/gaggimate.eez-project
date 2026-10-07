@@ -1196,8 +1196,8 @@
               "type": "LVGLContainerWidget",
               "left": 0,
               "top": -210,
-              "width": 300,
-              "height": 20,
+              "width": 68,
+              "height": 32,
               "customInputs": [],
               "customOutputs": [],
               "style": {
@@ -1213,7 +1213,7 @@
               "identifier": "standbyIcons",
               "leftUnit": "px",
               "topUnit": "px",
-              "widthUnit": "px",
+              "widthUnit": "content",
               "heightUnit": "px",
               "children": [
                 {
@@ -1256,10 +1256,10 @@
                     "definition": {
                       "MAIN": {
                         "DEFAULT": {
-                          "border_color": "Dark",
-                          "border_width": 10,
+                          "border_width": 0,
                           "img_recolor": "NiceWhite",
-                          "img_recolor_opa": 255
+                          "img_recolor_opa": 255,
+                          "bg_opa": 0
                         }
                       }
                     }
@@ -1315,10 +1315,10 @@
                     "definition": {
                       "MAIN": {
                         "DEFAULT": {
-                          "border_color": "Dark",
-                          "border_width": 10,
+                          "border_width": 0,
                           "img_recolor": "NiceWhite",
-                          "img_recolor_opa": 255
+                          "img_recolor_opa": 255,
+                          "bg_opa": 0
                         }
                       }
                     }
@@ -1374,10 +1374,10 @@
                     "definition": {
                       "MAIN": {
                         "DEFAULT": {
-                          "border_color": "Dark",
-                          "border_width": 10,
+                          "border_width": 0,
                           "img_recolor": "NiceWhite",
-                          "img_recolor_opa": 255
+                          "img_recolor_opa": 255,
+                          "bg_opa": 0
                         }
                       }
                     }
@@ -1394,10 +1394,10 @@
                   "sizeMode": "VIRTUAL"
                 }
               ],
-              "widgetFlags": "CLICK_FOCUSABLE|GESTURE_BUBBLE|PRESS_LOCK|SCROLLABLE|SCROLL_CHAIN_HOR|SCROLL_CHAIN_VER|SCROLL_ELASTIC|SCROLL_MOMENTUM|SCROLL_WITH_ARROW|SNAPPABLE",
+              "widgetFlags": "CLICK_FOCUSABLE|GESTURE_BUBBLE|PRESS_LOCK|SCROLL_CHAIN_HOR|SCROLL_CHAIN_VER|SCROLL_ELASTIC|SCROLL_MOMENTUM|SCROLL_WITH_ARROW|SNAPPABLE",
               "hiddenFlag": false,
               "hiddenFlagType": "literal",
-              "clickableFlag": true,
+              "clickableFlag": false,
               "clickableFlagType": "literal",
               "flagScrollbarMode": "",
               "flagScrollDirection": "",
@@ -1416,7 +1416,16 @@
                       "flex_main_place": "CENTER",
                       "flex_cross_place": "CENTER",
                       "flex_track_place": "CENTER",
-                      "align": "CENTER"
+                      "align": "CENTER",
+                      "pad_left": 8,
+                      "pad_right": 8,
+                      "pad_top": 6,
+                      "pad_bottom": 6,
+                      "pad_column": 8,
+                      "bg_color": "Dark",
+                      "bg_opa": 255,
+                      "border_width": 0,
+                      "radius": 10
                     }
                   }
                 }
