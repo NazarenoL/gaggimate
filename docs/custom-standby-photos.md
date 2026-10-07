@@ -10,6 +10,8 @@ The browser resizes the image to fit within 480 × 480, pads with black, and con
 
 The photo survives reboot and firmware OTA, which does not overwrite LittleFS in this revision. A filesystem flash or full flash erase will remove it, along with other data stored there. The included `docs/examples/corgi.jpg` is a test image; its attribution is in `docs/examples/README.md`. It is not automatically installed on the device.
 
+If **Save photo** makes the display restart and the browser eventually reports **Failed to fetch**, install a display build containing the background photo-save fix. Earlier builds wrote the whole photo inside the AsyncTCP callback, where a slow flash write can exceed the network task watchdog timeout. Saves now run in a separate task with smaller writes that yield between chunks. Updating the controller alone does not change this code. A serial crash log or `/api/core-dump` download can help confirm the reset cause.
+
 ## Can stock firmware install a fork over OTA?
 
 **The updater in this source revision cannot bootstrap custom display firmware through its existing web UI.** `WebUIPlugin.h` originally hardcoded `https://github.com/jniebuhr/gaggimate/releases/`. `handleOTASettings()` accepts only stable (`latest`) or `nightly`; other values are coerced to nightly. There is no user-supplied release URL, local firmware-upload HTTP endpoint, or ArduinoOTA service. The BLE DFU service is on the controller, not the display. Merely uploading a binary to this fork or enabling its Actions will not make stock display firmware download it.

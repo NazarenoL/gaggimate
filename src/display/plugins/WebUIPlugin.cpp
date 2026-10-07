@@ -17,6 +17,8 @@
 #include <esp_partition.h>
 #include <mbedtls/platform.h>
 #include <memory>
+#include <new>
+#include <freertos/task.h>
 #include <vector>
 #include <version.h>
 
@@ -209,7 +211,37 @@ void WebUIPlugin::setupServer() {
                 request->send(409, "text/plain", "Firmware update in progress");
                 return;
             }
+#ifdef GAGGIMATE_SIM
             request->send(StandbyPhoto::save(upload->pixels) ? 200 : 507, "text/plain", "");
+#else
+            // LittleFS can spend seconds erasing/programming flash. Running this
+            // inside AsyncTCP blocks its event loop and watchdog resets the display.
+            struct PhotoSave {
+                AsyncWebServerRequestPtr request;
+                uint8_t *pixels;
+                ~PhotoSave() { free(pixels); }
+            };
+            auto *job = new (std::nothrow) PhotoSave{request->pause(), upload->pixels};
+            if (!job) {
+                request->send(503, "text/plain", "Not enough memory to save photo");
+                return;
+            }
+            upload->pixels = nullptr; // Worker owns the bytes even if the browser disconnects.
+            if (xTaskCreate(
+                    [](void *param) {
+                        auto *job = static_cast<PhotoSave *>(param);
+                        const bool ok = StandbyPhoto::save(job->pixels);
+                        if (auto request = job->request.lock())
+                            request->send(ok ? 200 : 507, "text/plain",
+                                          ok ? "" : "Could not store photo; check free storage");
+                        delete job;
+                        vTaskDelete(nullptr);
+                    },
+                    "StandbyPhotoSave", 8192, job, 1, nullptr) != pdPASS) {
+                delete job;
+                request->send(503, "text/plain", "Could not start photo save");
+            }
+#endif
         },
         nullptr,
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
