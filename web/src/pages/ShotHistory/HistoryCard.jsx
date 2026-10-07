@@ -1,5 +1,5 @@
 import Card from '../../components/Card.jsx';
-import { useCallback, useState, useContext } from 'preact/hooks';
+import { useCallback, useState, useContext, useEffect } from 'preact/hooks';
 import { HistoryChart } from './HistoryChart.jsx';
 import { downloadJson } from '../../utils/download.js';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -32,6 +32,19 @@ export default function HistoryCard({ shot, onDelete, onLoad, onNotesChanged }) 
   const { armed: confirmDelete, armOrRun: confirmOrDelete } = useConfirmAction(4000);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiService
+      .request({ tp: 'req:history:notes:get', id: shot.id })
+      .then(response => {
+        if (!cancelled && response.notes) setShotNotes(response.notes);
+      })
+      .catch(error => console.error('Failed to load shot notes:', error));
+    return () => {
+      cancelled = true;
+    };
+  }, [apiService, shot.id]);
 
   const date = new Date(shot.timestamp * 1000);
 
@@ -236,6 +249,14 @@ export default function HistoryCard({ shot, onDelete, onLoad, onNotesChanged }) 
                 </div>
               </div>
             </div>
+
+            {(shotNotes?.beanType || shotNotes?.grindSetting) && (
+              <p className='text-base-content/80 text-sm'>
+                {shotNotes.beanType || 'Beans not recorded'}
+                {shotNotes.bean?.roastDate && ` · Roasted ${shotNotes.bean.roastDate}`}
+                {shotNotes.grindSetting && ` · Grind ${shotNotes.grindSetting}`}
+              </p>
+            )}
 
             {/* Stats Row */}
             <div className='text-base-content/80 mb-1 flex flex-row items-center gap-4 text-sm'>

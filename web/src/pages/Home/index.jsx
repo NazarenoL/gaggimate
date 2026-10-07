@@ -13,6 +13,7 @@ import { OverviewChart } from '../../components/OverviewChart.jsx';
 import Card from '../../components/Card.jsx';
 import { DashboardSidebar } from './DashboardSidebar.jsx';
 import { RecentShotsCard } from './cards/RecentShotsCard.jsx';
+import { BeanPicker } from './BeanPicker.jsx';
 import { BrewConfirmHost } from './BrewConfirmHost.jsx';
 import {
   DASHBOARD_LAYOUTS,
@@ -35,6 +36,7 @@ export function Home() {
         {isOrderFirst ? (
           <>
             <div className='flex min-h-0 min-w-0 flex-col gap-2 lg:col-span-1 landscape:max-lg:col-span-5 landscape:max-lg:min-h-0'>
+              <BeanPicker />
               <DashboardSidebar unified={unified} />
             </div>
             <Card
@@ -55,6 +57,7 @@ export function Home() {
               <OverviewChart />
             </Card>
             <div className='flex min-h-0 min-w-0 flex-col gap-2 lg:col-span-1 landscape:max-lg:col-span-5 landscape:max-lg:min-h-0'>
+              <BeanPicker />
               <DashboardSidebar unified={unified} />
             </div>
           </>

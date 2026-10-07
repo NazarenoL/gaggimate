@@ -258,6 +258,12 @@ void ShotHistoryPlugin::record() {
         } else {
             controller->getSettings().setHistoryIndex(controller->getSettings().getHistoryIndex() + 1);
             cleanupHistory();
+            if (!currentBeanNotes.isEmpty()) {
+                JsonDocument notes(&psramAllocator);
+                deserializeJson(notes, currentBeanNotes);
+                notes["id"] = currentId;
+                saveNotes(currentId, notes);
+            }
 
             // Always create a complete index entry via upsert.
             // If an early entry exists, it gets overwritten with final data.
@@ -268,7 +274,7 @@ void ShotHistoryPlugin::record() {
             indexEntry.duration = header.durationMs;
             indexEntry.volume = header.finalWeight;
             indexEntry.rating = 0;
-            indexEntry.flags = SHOT_FLAG_COMPLETED;
+            indexEntry.flags = SHOT_FLAG_COMPLETED | (currentBeanNotes.isEmpty() ? 0 : SHOT_FLAG_HAS_NOTES);
             strncpy(indexEntry.profileId, header.profileId, sizeof(indexEntry.profileId) - 1);
             indexEntry.profileId[sizeof(indexEntry.profileId) - 1] = '\0';
             strncpy(indexEntry.profileName, header.profileName, sizeof(indexEntry.profileName) - 1);
@@ -313,6 +319,25 @@ void ShotHistoryPlugin::startRecording() {
         }
     }
     currentId = padId(String(controller->getSettings().getHistoryIndex()));
+    {
+        std::lock_guard<std::mutex> guard(beansMutex);
+        JsonDocument state(&psramAllocator);
+        JsonDocument notes(&psramAllocator);
+        if (loadBeans(state)) {
+            for (JsonObject bean : state["beans"].as<JsonArray>()) {
+                if (bean["id"].as<String>() != state["selectedId"].as<String>()) continue;
+                notes["beanId"] = bean["id"];
+                notes["bean"] = bean;
+                notes["beanType"] = bean["roaster"].as<String>() + " — " + bean["name"].as<String>();
+                if (!bean["grindSetting"].isNull()) {
+                    notes["grindSetting"] = String(bean["grindSetting"].as<float>(), 1);
+                }
+                break;
+            }
+        }
+        currentBeanNotes = "";
+        if (!notes.isNull()) serializeJson(notes, currentBeanNotes);
+    }
     shotStart = millis();
     lastWeightChangeTime = 0;
     extendedRecordingStart = 0;
@@ -533,6 +558,7 @@ void ShotHistoryPlugin::handleRequest(JsonDocument &request, JsonDocument &respo
         }
         fs->remove("/h/" + paddedId + ".slog");
         fs->remove("/h/" + paddedId + ".json");
+        fs->remove("/h/" + String(id.toInt()) + ".json");
 
         // Mark as deleted in index
         markIndexDeleted(id.toInt());
@@ -573,7 +599,7 @@ void ShotHistoryPlugin::handleRequest(JsonDocument &request, JsonDocument &respo
 }
 
 void ShotHistoryPlugin::saveNotes(const String &id, const JsonDocument &notes) {
-    File file = fs->open("/h/" + id + ".json", FILE_WRITE);
+    File file = fs->open("/h/" + padId(id) + ".json", FILE_WRITE);
     if (file) {
         String notesStr;
         serializeJson(notes, notesStr);
@@ -583,7 +609,9 @@ void ShotHistoryPlugin::saveNotes(const String &id, const JsonDocument &notes) {
 }
 
 void ShotHistoryPlugin::loadNotes(const String &id, JsonDocument &notes) {
-    File file = fs->open("/h/" + id + ".json", "r");
+    File file = fs->open("/h/" + padId(id) + ".json", "r");
+    // Older clients saved notes under an unpadded ID.
+    if (!file) file = fs->open("/h/" + String(id.toInt()) + ".json", "r");
     if (file) {
         String notesStr = file.readString();
         file.close();
@@ -1000,7 +1028,8 @@ void ShotHistoryPlugin::rebuildIndex() {
         }
 
         // Check for notes and extract rating and volume override
-        String notesPath = "/h/" + String(shotId, 10) + ".json";
+        String notesPath = "/h/" + padId(String(shotId, 10)) + ".json";
+        if (!fs->exists(notesPath)) notesPath = "/h/" + String(shotId, 10) + ".json";
         if (fs->exists(notesPath)) {
             entry.flags |= SHOT_FLAG_HAS_NOTES;
 
@@ -1110,4 +1139,112 @@ bool ShotHistoryPlugin::writeEntryAtPosition(File &indexFile, size_t position, c
         return false;
     }
     return true;
+}
+
+// Bean library lives on internal storage even when shot history uses an SD card.
+bool ShotHistoryPlugin::loadBeans(JsonDocument &state) {
+    if (!LittleFS.exists("/beans.json")) {
+        state["beans"].to<JsonArray>();
+        state["selectedId"] = "";
+        state["nextId"] = 1;
+        return true;
+    }
+    File file = LittleFS.open("/beans.json", "r");
+    return file && deserializeJson(state, file) == DeserializationError::Ok &&
+           state["beans"].is<JsonArray>() && state["selectedId"].is<String>() &&
+           state["nextId"].is<uint32_t>();
+}
+
+bool ShotHistoryPlugin::saveBeans(const JsonDocument &state) {
+    File file = LittleFS.open("/beans.tmp", FILE_WRITE);
+    if (!file) return false;
+    const size_t written = serializeJson(state, file);
+    file.close();
+    if (written != measureJson(state)) return false;
+    return LittleFS.rename("/beans.tmp", "/beans.json");
+}
+
+void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &response) {
+    std::lock_guard<std::mutex> guard(beansMutex);
+    const String type = request["tp"].as<String>();
+    response["tp"] = "res:" + type.substring(4);
+    response["rid"] = request["rid"];
+    JsonDocument state(&psramAllocator);
+    if (!loadBeans(state)) {
+        response["error"] = "Could not read bean library";
+        return;
+    }
+    JsonArray beans = state["beans"].as<JsonArray>();
+    const String id = request["id"] | "";
+    int index = -1;
+    for (size_t i = 0; i < beans.size(); ++i) {
+        if (beans[i]["id"].as<String>() == id) index = i;
+    }
+    if (type == "req:beans:save") {
+        String roaster = request["bean"]["roaster"] | "";
+        String name = request["bean"]["name"] | "";
+        String date = request["bean"]["roastDate"] | "";
+        roaster.trim();
+        name.trim();
+        bool validDate = date.length() == 10 && date[4] == '-' && date[7] == '-';
+        for (size_t i = 0; i < date.length(); ++i) {
+            if (i != 4 && i != 7 && (date[i] < '0' || date[i] > '9')) validDate = false;
+        }
+        int year = date.substring(0, 4).toInt();
+        int month = date.substring(5, 7).toInt();
+        int day = date.substring(8, 10).toInt();
+        const int days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+        int maxDay = month >= 1 && month <= 12 ? days[month - 1] : 0;
+        if (month == 2 && (year % 400 == 0 || (year % 4 == 0 && year % 100 != 0))) ++maxDay;
+        validDate = validDate && year > 0 && day >= 1 && day <= maxDay;
+        if (roaster.isEmpty() || name.isEmpty() || roaster.length() > 100 || name.length() > 100 ||
+            !validDate || (!id.isEmpty() && index < 0) || (index < 0 && beans.size() >= 100)) {
+            response["error"] = "Provide a roaster, name and valid roast date (maximum 100 beans)";
+            return;
+        }
+        JsonObject bean;
+        if (index >= 0) {
+            bean = beans[index].as<JsonObject>();
+        } else {
+            bean = beans.add<JsonObject>();
+            uint32_t nextId = state["nextId"] | 1;
+            bean["id"] = String(nextId);
+            state["nextId"] = nextId + 1;
+            if (state["selectedId"].as<String>().isEmpty()) state["selectedId"] = bean["id"];
+        }
+        bean["roaster"] = roaster;
+        bean["name"] = name;
+        bean["roastDate"] = date;
+    } else if (type == "req:beans:delete") {
+        if (index < 0) {
+            response["error"] = "Bean not found";
+            return;
+        }
+        beans.remove(index);
+        if (state["selectedId"].as<String>() == id) state["selectedId"] = "";
+    } else if (type == "req:beans:select") {
+        if (index < 0 && !id.isEmpty()) {
+            response["error"] = "Bean not found";
+            return;
+        }
+        if (request["grindSetting"].isNull() == false) {
+            double grind = request["grindSetting"].as<double>();
+            if (index < 0 || !request["grindSetting"].is<double>() || !std::isfinite(grind) ||
+                grind < 1 || grind > 16 || std::abs(grind * 10 - std::round(grind * 10)) > 0.00001) {
+                response["error"] = "Grind size must be 1–16 in steps of 0.1";
+                return;
+            }
+            beans[index]["grindSetting"] = grind;
+        }
+        state["selectedId"] = id;
+    } else if (type != "req:beans:list") {
+        response["error"] = "Unknown bean request";
+        return;
+    }
+    if (type != "req:beans:list" && !saveBeans(state)) {
+        response["error"] = "Could not save bean library";
+        return;
+    }
+    response["beans"] = beans;
+    response["selectedId"] = state["selectedId"];
 }

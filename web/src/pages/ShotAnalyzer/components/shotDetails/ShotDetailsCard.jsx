@@ -162,6 +162,9 @@ export function ShotDetailsCard({ entry, isCompare }) {
               onBlur={flushSave}
               placeholder='Single Origin, Blend...'
             />
+            {notes.bean?.roastDate && (
+              <span className='text-base-content/60 text-xs'>Roasted {notes.bean.roastDate}</span>
+            )}
           </DetailField>
           <DetailField icon={faYinYang} label='Balance / Taste' className='col-span-2'>
             <div className='bg-base-200/70 flex w-full min-w-0 rounded-full p-0.5'>

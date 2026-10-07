@@ -69,6 +69,7 @@ const NAVIGATION_SECTIONS = [
     showDivider: true,
     items: [
       { label: 'Profiles', link: '/profiles', icon: faList },
+      { label: 'Beans', link: '/beans', icon: faList },
       { label: 'Shot History', link: '/history', icon: faTimeline },
       { label: 'Shot Analyzer', link: '/analyzer', icon: faMagnifyingGlassChart, isNew: false },
       { label: 'Statistics', link: '/statistics', icon: faChartSimple, isNew: false },

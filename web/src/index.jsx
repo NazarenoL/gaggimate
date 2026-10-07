@@ -22,6 +22,7 @@ import { faBars } from '@fortawesome/free-solid-svg-icons/faBars';
 // large to ship up-front on the ESP32's slow WiFi pipe.
 const Home = lazy(() => import('./pages/Home/index.jsx').then(m => m.Home));
 const NotFound = lazy(() => import('./pages/_404.jsx').then(m => m.NotFound));
+const Beans = lazy(() => import('./pages/Beans/index.jsx').then(m => m.Beans));
 const Settings = lazy(() => import('./pages/Settings/index.jsx').then(m => m.Settings));
 const ProfileList = lazy(() => import('./pages/ProfileList/index.jsx').then(m => m.ProfileList));
 const ProfileEdit = lazy(() => import('./pages/ProfileEdit/index.jsx').then(m => m.ProfileEdit));
@@ -101,6 +102,7 @@ export function App() {
                     <Router>
                       <Route path='/' component={Home} />
                       <Route path='/dashboard-settings' component={DashboardSettings} />
+                      <Route path='/beans' component={Beans} />
                       <Route path='/profiles' component={ProfileList} />
                       <Route path='/profiles/:id' component={ProfileEdit} />
                       <Route path='/settings/:tab?' component={Settings} />

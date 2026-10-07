@@ -239,6 +239,15 @@ void WebSocketHandler::handleWebSocketData(AsyncWebSocket *server, AsyncWebSocke
                     resp["msg"] = "Rebuild started";
                     client->text(toWsBuffer(resp));
                     ShotHistory.startAsyncRebuild();
+                } else if (msgType.startsWith("req:beans:")) {
+                    JsonDocument resp(&psramAllocator);
+                    ShotHistory.handleBeansRequest(doc, resp);
+                    client->text(toWsBuffer(resp));
+                    if (msgType != "req:beans:list" && resp["error"].isNull()) {
+                        resp["tp"] = "evt:beans:changed";
+                        resp.remove("rid");
+                        ws.textAll(toWsBuffer(resp));
+                    }
                 } else if (msgType.startsWith("req:history")) {
                     JsonDocument resp(&psramAllocator);
                     ShotHistory.handleRequest(doc, resp);
