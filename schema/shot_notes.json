@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "properties": {
     "id": {
-      "description": "Shot ID matching the .dat file",
+      "description": "Shot ID matching the .slog file",
       "type": "string"
     },
     "rating": {
@@ -40,7 +40,11 @@
     "balanceTaste": {
       "description": "Balance/taste selector",
       "type": "string",
-      "enum": ["bitter", "balanced", "sour"]
+      "enum": [
+        "bitter",
+        "balanced",
+        "sour"
+      ]
     },
     "notes": {
       "description": "User notes",
@@ -50,7 +54,38 @@
     "timestamp": {
       "description": "Timestamp when notes were last updated",
       "type": "integer"
+    },
+    "beanId": {
+      "type": "string",
+      "description": "Bean library ID at brew start"
+    },
+    "bean": {
+      "type": "object",
+      "description": "Bean details captured at brew start; retained when library entries change",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "roaster": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "roastDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "grindSetting": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 16,
+          "multipleOf": 0.1
+        }
+      }
     }
   },
-  "required": ["id"]
+  "required": [
+    "id"
+  ]
 }

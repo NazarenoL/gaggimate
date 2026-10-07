@@ -241,7 +241,7 @@ export default function ShotNotesCard({ shot, onNotesUpdate, onNotesLoaded }) {
 
         {/* Bean Type */}
         <div className='form-control'>
-          <label className='mb-2 block text-sm font-medium'>Bean Type</label>
+          <label className='mb-2 block text-sm font-medium'>Beans</label>
           {isEditing ? (
             <input
               type='text'
@@ -254,6 +254,9 @@ export default function ShotNotesCard({ shot, onNotesUpdate, onNotesLoaded }) {
             <div className='input input-bordered bg-base-200 w-full cursor-default'>
               {notes.beanType || '—'}
             </div>
+          )}
+          {notes.bean?.roastDate && (
+            <p className='text-base-content/70 text-sm'>Roasted {notes.bean.roastDate}</p>
           )}
         </div>
 

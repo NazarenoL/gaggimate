@@ -3,6 +3,7 @@
 
 #include <ArduinoJson.h>
 #include <LittleFS.h>
+#include <mutex>
 #include <display/core/Plugin.h>
 #include <display/core/utils.h>
 #include <display/models/shot_log_format.h>
@@ -23,6 +24,8 @@ class ShotHistoryPlugin : public Plugin {
     void record();
 
     void handleRequest(JsonDocument &request, JsonDocument &response);
+
+    void handleBeansRequest(JsonDocument &request, JsonDocument &response);
 
     // Index management methods
     bool appendToIndex(const ShotIndexEntry &entry);
@@ -57,6 +60,11 @@ class ShotHistoryPlugin : public Plugin {
 
     void recordPhaseTransition(uint8_t phaseNumber, uint16_t sampleIndex,
                                uint8_t reason); // Helper for phase transitions
+
+    std::mutex beansMutex;
+    String currentBeanNotes; // Immutable snapshot captured at brew start
+    bool loadBeans(JsonDocument &state);
+    bool saveBeans(const JsonDocument &state);
 
     Controller *controller = nullptr;
     PluginManager *pluginManager = nullptr;
