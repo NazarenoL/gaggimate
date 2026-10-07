@@ -78,3 +78,28 @@ also shows the saved fields. The binary shot and index formats are unchanged.
 
 Notes use six-digit filenames consistently. Reads and index rebuilds also
 support legacy unpadded notes filenames.
+
+## Display controls
+
+The start menu's coffee bean button opens a left/right selector of up to ten
+recently added or selected beans. Select commits the previewed bean; Back leaves
+it unchanged. Older libraries start with the newest beans and the selected bean.
+The web UI remains available for the full library and adding/editing beans.
+
+After a non-utility brew ends (including a manually stopped shot), the display
+asks **Next grind?** for the bean captured at brew start. Arrows adjust by 0.1
+between 1 and 16; Save persists the next-shot value, and Skip discards the draft.
+The default is that bean's current saved grind, falling back to the last known
+grind or 1.0 if none has ever been saved. This does not rewrite the finished
+shot's notes. No prompt appears without a selected bean or after a utility flush.
+
+`req:beans:grind` accepts `id` and `grindSetting` to update a bean without changing
+`selectedId`. Lists and mutation replies also include `recentIds` (newest first,
+maximum ten). Existing clients can ignore it. Successful mutations made from
+both the display and the web UI broadcast `evt:beans:changed`.
+
+Simulator integration checks: after building `display-sim`, run
+`scripts/test_display_beans.sh`. Alternatively, run its `program` with
+`--test-beans` **from an empty temporary directory**; the checks create test beans
+in that directory's `sim_data`. On headless Linux use `SDL_VIDEODRIVER=dummy
+SDL_RENDER_DRIVER=software`.

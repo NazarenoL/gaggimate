@@ -46,9 +46,7 @@ void action_on_water_screen(lv_event_t *e) {
 };
 
 void action_on_grind_screen(lv_event_t *e) {
-    controller.getUI()->changeScreen(SCREEN_ID_GRIND_SCREEN);
-    controller.setMode(MODE_GRIND);
-    controller.deactivate();
+    controller.getUI()->onBeanSwitch();
 };
 
 void action_on_brew_start(lv_event_t *e) { controller.activate(); }; // SHORT_CLICKED in EEZ: never fires after a long press

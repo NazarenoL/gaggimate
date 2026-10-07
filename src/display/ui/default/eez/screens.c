@@ -3140,7 +3140,7 @@ void tick_screen_menu_screen_new() {
     (void)flowState;
     tick_user_widget_dials(getFlowState(flowState, 0), 40, &state->new_menu_dials);
     {
-        bool new_val = evalBooleanProperty(flowState, 6, 3, "Failed to evaluate Hidden flag");
+        bool new_val = false; // The bean selector is available without a connected grinder.
         bool cur_val = lv_obj_has_flag(objects.btn_grind_1, LV_OBJ_FLAG_HIDDEN);
         if (new_val != cur_val) {
             tick_value_change_obj = objects.btn_grind_1;

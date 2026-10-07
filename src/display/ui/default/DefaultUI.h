@@ -1,6 +1,7 @@
 #ifndef DEFAULTUI_H
 #define DEFAULTUI_H
 
+#include "BeanControls.h"
 #include <atomic>
 #include <display/core/PluginManager.h>
 #include <display/core/ProfileManager.h>
@@ -36,6 +37,7 @@ class DefaultUI {
 
     void changeBrewScreenMode(BrewScreenState state);
     void onProfileSwitch();
+    void onBeanSwitch() { beanControls.openSelector(); }
     void onNextProfile();
     void onPreviousProfile();
     void onProfileSelect();
@@ -66,6 +68,7 @@ class DefaultUI {
     }
 
   private:
+    BeanControls beanControls;
     void updateStandbyPhoto();
     lv_img_dsc_t standbyPhotoDescriptor{};
     uint8_t *standbyPhotoPixels = nullptr;

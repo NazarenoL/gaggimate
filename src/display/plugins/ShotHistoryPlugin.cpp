@@ -406,6 +406,16 @@ void ShotHistoryPlugin::endRecording() {
         pluginManager->trigger(statsEvent);
     }
 
+    if (recording && pluginManager) {
+        JsonDocument notes(&psramAllocator);
+        String beanId;
+        {
+            std::lock_guard<std::mutex> guard(beansMutex);
+            deserializeJson(notes, currentBeanNotes);
+            beanId = notes["beanId"].as<String>();
+        }
+        if (!beanId.isEmpty()) pluginManager->trigger("beans:brew:finished", "id", beanId);
+    }
     recording = false;
 }
 
@@ -1175,7 +1185,7 @@ bool ShotHistoryPlugin::saveBeans(const JsonDocument &state) {
 }
 
 void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &response) {
-    std::lock_guard<std::mutex> guard(beansMutex);
+    std::unique_lock<std::mutex> guard(beansMutex);
     const String type = request["tp"].as<String>();
     response["tp"] = "res:" + type.substring(4);
     response["rid"] = request["rid"];
@@ -1233,8 +1243,8 @@ void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &
         }
         beans.remove(index);
         if (state["selectedId"].as<String>() == id) state["selectedId"] = "";
-    } else if (type == "req:beans:select") {
-        if (index < 0 && !id.isEmpty()) {
+    } else if (type == "req:beans:select" || type == "req:beans:grind") {
+        if (index < 0 && (!id.isEmpty() || type == "req:beans:grind")) {
             response["error"] = "Bean not found";
             return;
         }
@@ -1248,11 +1258,31 @@ void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &
             beans[index]["grindSetting"] = grind;
             state["lastGrindSetting"] = grind;
         }
-        state["selectedId"] = id;
+        if (type == "req:beans:grind" && request["grindSetting"].isNull()) {
+            response["error"] = "Grind size is required";
+            return;
+        }
+        if (type == "req:beans:select") state["selectedId"] = id;
     } else if (type != "req:beans:list") {
         response["error"] = "Unknown bean request";
         return;
     }
+    // Keep the ten most recently added/selected beans; old libraries fall back to newest first.
+    JsonDocument recent(&psramAllocator);
+    JsonArray ids = recent.to<JsonArray>();
+    auto addRecent = [&](const String &candidate) {
+        if (candidate.isEmpty() || ids.size() >= 10) return;
+        bool exists = false;
+        for (JsonObject bean : beans) if (bean["id"].as<String>() == candidate) exists = true;
+        for (JsonVariant value : ids) if (value.as<String>() == candidate) return;
+        if (exists) ids.add(candidate);
+    };
+    if (type == "req:beans:select") addRecent(id);
+    if (type == "req:beans:save" && id.isEmpty() && beans.size()) addRecent(beans[beans.size() - 1]["id"].as<String>());
+    for (JsonVariant value : state["recentIds"].as<JsonArray>()) addRecent(value.as<String>());
+    addRecent(state["selectedId"].as<String>());
+    for (size_t i = beans.size(); i > 0; --i) addRecent(beans[i - 1]["id"].as<String>());
+    state["recentIds"] = ids;
     if (type != "req:beans:list" && !saveBeans(state)) {
         response["error"] = "Could not save bean library";
         return;
@@ -1260,4 +1290,8 @@ void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &
     response["beans"] = beans;
     response["selectedId"] = state["selectedId"];
     response["lastGrindSetting"] = state["lastGrindSetting"];
+    response["recentIds"] = state["recentIds"];
+    // Event listeners may read the library again; release the file lock first.
+    guard.unlock();
+    if (type != "req:beans:list" && pluginManager) pluginManager->trigger("beans:changed");
 }

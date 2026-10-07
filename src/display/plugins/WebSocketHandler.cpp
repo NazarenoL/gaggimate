@@ -98,6 +98,16 @@ void WebSocketHandler::setup(Controller *_controller, PluginManager *_pluginMana
         broadcastJson(doc);
     });
 
+    pluginManager->on("beans:changed", [this](Event const &) {
+        JsonDocument request(&psramAllocator), response(&psramAllocator);
+        request["tp"] = "req:beans:list";
+        ShotHistory.handleBeansRequest(request, response);
+        if (!response["error"].isNull()) return;
+        response.remove("rid");
+        response["tp"] = "evt:beans:changed";
+        broadcastJson(response);
+    });
+
     // Subscribe to Bluetooth scale weight updates
     pluginManager->on("controller:volumetric-measurement:bluetooth:change",
                       [this](Event const &event) { this->currentBluetoothWeight = event.getFloat("value"); });
@@ -243,11 +253,6 @@ void WebSocketHandler::handleWebSocketData(AsyncWebSocket *server, AsyncWebSocke
                     JsonDocument resp(&psramAllocator);
                     ShotHistory.handleBeansRequest(doc, resp);
                     client->text(toWsBuffer(resp));
-                    if (msgType != "req:beans:list" && resp["error"].isNull()) {
-                        resp["tp"] = "evt:beans:changed";
-                        resp.remove("rid");
-                        ws.textAll(toWsBuffer(resp));
-                    }
                 } else if (msgType.startsWith("req:history")) {
                     JsonDocument resp(&psramAllocator);
                     ShotHistory.handleRequest(doc, resp);
