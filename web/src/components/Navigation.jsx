@@ -50,6 +50,19 @@ function getRandomIcon() {
 
 const update = computed(() => machine.value.status.update);
 
+// A coffee bean silhouette with its curved centre seam.
+const coffeeBeanIcon = {
+  prefix: 'fas',
+  iconName: 'coffee-bean',
+  icon: [
+    32,
+    32,
+    [],
+    'e000',
+    'M25 3C18-1 7 5 3 14c-3 7-1 13 4 15 6 3 16-2 20-10 4-7 3-13-2-16ZM23 5c-8 5-3 12-9 17-2 2-5 3-7 4 8-6 3-13 9-18 2-1 4-2 7-3Z',
+  ],
+};
+
 const NAVIGATION_SECTIONS = [
   {
     id: 'dashboard',
@@ -69,7 +82,7 @@ const NAVIGATION_SECTIONS = [
     showDivider: true,
     items: [
       { label: 'Profiles', link: '/profiles', icon: faList },
-      { label: 'Beans', link: '/beans', icon: faList },
+      { label: 'Beans', link: '/beans', icon: coffeeBeanIcon },
       { label: 'Shot History', link: '/history', icon: faTimeline },
       { label: 'Shot Analyzer', link: '/analyzer', icon: faMagnifyingGlassChart, isNew: false },
       { label: 'Statistics', link: '/statistics', icon: faChartSimple, isNew: false },

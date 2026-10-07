@@ -64,6 +64,7 @@ DefaultUI::DefaultUI(Controller *controller, Driver *driver, PluginManager *plug
 
 void DefaultUI::init() {
     profileManager = controller->getProfileManager();
+    beanControls.init(controller, pluginManager);
     auto triggerRender = [this](Event const &) { rerender = true; };
     pluginManager->on("boiler:currentTemperature:change", [=](Event const &event) {
         int newTemp = static_cast<int>(event.getFloat("value"));
@@ -276,6 +277,7 @@ void DefaultUI::loop() {
     }
 
     ui_tick();
+    beanControls.loop();
     updateStandbyPhoto();
     lv_task_handler();
 }
@@ -432,15 +434,13 @@ void DefaultUI::setupState() {
     effect_mgr.use_effect([this]() { return currentScreen == SCREEN_ID_MENU_SCREEN_NEW; },
                           [this]() {
                               int radius = 135;
-                              int count = grindAvailable ? 4 : 3;
-                              int step = 360 / (grindAvailable ? 4 : 3);
-                              int iconOffset = grindAvailable ? 1 : 0;
+                              int count = 4;
+                              int step = 360 / count;
                               int rotationOffset = count == 4 ? 45 : 0;
                               positionMenuIcon(objects.btn_brew_1, step * 0 - rotationOffset, radius);
                               positionMenuIcon(objects.btn_steam_1, step * 1 - rotationOffset, radius);
                               positionMenuIcon(objects.btn_water_1, step * 2 - rotationOffset, radius);
                               positionMenuIcon(objects.btn_grind_1, step * 3 - rotationOffset, radius);
-                              // positionMenuIcon(objects.btn_settings_1, step * (3 + iconOffset) - rotationOffset, radius);
                           },
                           &grindAvailable);
 }

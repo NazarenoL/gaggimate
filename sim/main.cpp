@@ -14,11 +14,15 @@
 // The generated UI event handlers reference this global (see main.h on device).
 Controller controller;
 
+#include "tests/bean_controls.h"
+
 int main(int argc, char **argv) {
     // Optional: `--screenshot <path> [delayMs]` renders for a bit, saves a BMP, exits.
+    bool testBeans = false;
     const char *shotPath = nullptr;
     unsigned long shotDelayMs = 4000;
     for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--test-beans") == 0) testBeans = true;
         if (strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
             shotPath = argv[++i];
             if (i + 1 < argc)
@@ -75,6 +79,8 @@ int main(int argc, char **argv) {
         }
 
         drv->pumpAndRender();
+
+        if (testBeans && millis() - start >= 4000) return testBeanControls();
 
         if (shotPath && !shotTaken && millis() - start >= shotDelayMs) {
             drv->screenshot(shotPath);
