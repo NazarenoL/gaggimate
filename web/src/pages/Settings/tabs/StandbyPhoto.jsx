@@ -8,6 +8,7 @@ export default function StandbyPhoto() {
   const [savedPreview, setSavedPreview] = useState('');
   const [photo, setPhoto] = useState(null);
   const [busy, setBusy] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   useEffect(() => {
@@ -50,6 +51,7 @@ export default function StandbyPhoto() {
 
   async function save(remove = false) {
     setBusy(true);
+    setSaving(true);
     setError('');
     setMessage('');
     try {
@@ -71,8 +73,13 @@ export default function StandbyPhoto() {
         remove ? 'Photo removed. Standby uses a plain background.' : 'Standby photo saved.',
       );
     } catch (e) {
-      setError(e.message);
+      setError(
+        e instanceof TypeError
+          ? 'Lost connection to the display while saving. If it restarted, update the display firmware and try again.'
+          : e.message,
+      );
     } finally {
+      setSaving(false);
       setBusy(false);
     }
   }
@@ -119,7 +126,7 @@ export default function StandbyPhoto() {
           Remove photo
         </button>
       </div>
-      {busy && <p role='status'>Processing photo…</p>}
+      {busy && <p role='status'>{saving ? 'Saving photo to display…' : 'Processing photo…'}</p>}
       {message && <p role='status'>{message}</p>}
       {error && (
         <p role='alert' className='text-error'>
