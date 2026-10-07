@@ -80,16 +80,16 @@ jobs:
           node node_modules/eslint/bin/eslint.js src/services/beans.js src/pages/Beans/index.jsx src/pages/Home/BeanPicker.jsx src/utils/standbyPhoto.js src/pages/Settings/tabs/StandbyPhoto.jsx
       - name: Build display and controller
         run: |
-          pio run -e display -e controller
           pio run -e display -t buildfs
+          cp .pio/build/display/littlefs.bin out/display-filesystem.bin
+          pio run -e display -e controller
           cp .pio/build/display/firmware.bin out/display-firmware.bin
           cp .pio/build/controller/firmware.bin out/board-firmware.bin
           cp .pio/build/display/bootloader.bin out/display-bootloader.bin
           cp .pio/build/display/partitions.bin out/display-partitions.bin
-          cp .pio/build/display/littlefs.bin out/display-filesystem.bin
           cp .pio/build/controller/bootloader.bin out/board-bootloader.bin
           cp .pio/build/controller/partitions.bin out/board-partitions.bin
-          sha256sum out/*.bin > out/SHA256SUMS.txt
+          (cd out && sha256sum *.bin > SHA256SUMS.txt)
           cp docs/custom-standby-photos.md out/INSTALLATION.md
       - uses: actions/upload-artifact@v4
         with:
