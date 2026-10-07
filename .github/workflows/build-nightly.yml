@@ -8,6 +8,8 @@ permissions:
 name: Build Nightly
 jobs:
   ota-testbench:
+    # Official deployment requires upstream update-server credentials.
+    if: github.repository == 'jniebuhr/gaggimate'
     uses: ./.github/workflows/ota-testbench.yml
   build:
     needs: ota-testbench

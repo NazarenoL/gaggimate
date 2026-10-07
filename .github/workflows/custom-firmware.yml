@@ -1,60 +1,131 @@
 name: Build custom firmware
 on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
   workflow_dispatch:
     inputs:
       version:
-        description: "New version tag, higher than the installed firmware (e.g. v1.9.1-photos1)"
-        required: true
+        description: "Optional release tag higher than installed firmware (e.g. v1.9.2-custom1). Leave blank for artifacts only."
+        required: false
         type: string
 permissions:
-  contents: write
+  contents: read
+concurrency:
+  group: custom-firmware-${{ github.ref }}-${{ inputs.version || 'ci' }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Validate and tag version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+            ~/.platformio/packages
+          key: ${{ runner.os }}-custom-pio-${{ hashFiles('platformio.ini', 'lib/**/library.json') }}
+      - name: Prepare build version
+        id: version
         env:
           CUSTOM_VERSION: ${{ inputs.version }}
         run: |
           python3 - <<'PY'
-          import os, re, subprocess
-          version = os.environ['CUSTOM_VERSION']
-          if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:[-][A-Za-z0-9]+)*)?', version):
-              raise SystemExit('Expected a semantic version beginning with v')
-          subprocess.run(['git', 'tag', version], check=True)
+          import os, pathlib, re, subprocess
+          requested = os.environ.get('CUSTOM_VERSION', '').strip()
+          if requested:
+              if os.environ['GITHUB_REF'] != 'refs/heads/master':
+                  raise SystemExit('Publish releases from master only')
+              if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)?', requested):
+                  raise SystemExit('Expected a semantic version beginning with v; avoid dots in the suffix')
+              subprocess.run(['git', 'tag', requested], check=True)
+          described = subprocess.run(['git', 'describe', '--tags', '--match', 'v*'], capture_output=True, text=True)
+          if described.returncode:
+              # Forks do not inherit upstream tags. Give artifact-only builds a
+              # valid version rather than compiling an empty firmware version.
+              requested = 'v0.0.0-ci-' + os.environ['GITHUB_RUN_NUMBER']
+              subprocess.run(['git', 'tag', requested], check=True)
+              version = requested
+          else:
+              version = described.stdout.strip()
+          pathlib.Path('out').mkdir(exist_ok=True)
+          pathlib.Path('out/version.txt').write_text(version + '\n')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('version=' + version + '\n')
           PY
-          mkdir -p out
-          printf '%s\n' "$CUSTOM_VERSION" > out/version.txt
       - name: Install PlatformIO
-        run: pip install platformio
+        run: pip install platformio==6.2.0
       - name: Build embedded web UI
         run: scripts/build_webui.sh
+      - name: Test photo conversion and lint new web components
+        working-directory: web
+        run: |
+          node --test test/standbyPhoto.test.js
+          node node_modules/eslint/bin/eslint.js src/services/beans.js src/pages/Beans/index.jsx src/pages/Home/BeanPicker.jsx src/utils/standbyPhoto.js src/pages/Settings/tabs/StandbyPhoto.jsx
       - name: Build display and controller
         run: |
           pio run -e display -e controller
+          pio run -e display -t buildfs
           cp .pio/build/display/firmware.bin out/display-firmware.bin
           cp .pio/build/controller/firmware.bin out/board-firmware.bin
           cp .pio/build/display/bootloader.bin out/display-bootloader.bin
           cp .pio/build/display/partitions.bin out/display-partitions.bin
+          cp .pio/build/display/littlefs.bin out/display-filesystem.bin
           cp .pio/build/controller/bootloader.bin out/board-bootloader.bin
           cp .pio/build/controller/partitions.bin out/board-partitions.bin
+          sha256sum out/*.bin > out/SHA256SUMS.txt
+          cp docs/custom-standby-photos.md out/INSTALLATION.md
       - uses: actions/upload-artifact@v4
         with:
-          name: custom-firmware
+          name: custom-firmware-${{ github.run_number }}
           path: out/*
-      - name: Publish release in this fork
+          if-no-files-found: error
+          retention-days: 30
+      - name: Summarize build
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          printf '## Firmware build\n\nVersion: `%s`\n\nDownload **custom-firmware-%s** from this run.\n\nDisplay: LilyGo-T-RGB, 16 MB flash / 8 MB PSRAM. The filesystem image is for initial installs, not ordinary upgrades.\n' "$BUILD_VERSION" "$GITHUB_RUN_NUMBER" >> "$GITHUB_STEP_SUMMARY"
+  release:
+    if: github.event_name == 'workflow_dispatch' && inputs.version != ''
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: custom-firmware-${{ github.run_number }}
+          path: out
+      - name: Publish OTA release in this fork
         env:
           GH_TOKEN: ${{ github.token }}
-          CUSTOM_VERSION: ${{ inputs.version }}
+          GH_REPO: ${{ github.repository }}
+          CUSTOM_VERSION: ${{ needs.build.outputs.version }}
         run: |
-          git push origin "$CUSTOM_VERSION"
-          gh release create "$CUSTOM_VERSION" out/* --title "Custom firmware $CUSTOM_VERSION" --notes 'Custom standby photos. See docs/custom-standby-photos.md for installation and OTA instructions.' --latest
+          cat > release-notes.md <<'NOTES'
+          Custom GaggiMate firmware with bean/grind tracking, standby photos, and fork OTA.
+
+          OTA uses display-firmware.bin or board-firmware.bin. USB installation details are in INSTALLATION.md. Display target: LilyGo-T-RGB, 16 MB flash / 8 MB PSRAM.
+
+          Existing stock display firmware needs its first fork installation over USB. Once installed, select Stable in Settings → System to update from this fork's latest release. Do not flash the filesystem image for an ordinary upgrade.
+          NOTES
+          # Keep incomplete uploads out of the OTA channel until every asset is uploaded.
+          gh release create "$CUSTOM_VERSION" out/* --target "$GITHUB_SHA" --title "Custom firmware $CUSTOM_VERSION" --notes-file release-notes.md --draft
+          gh release edit "$CUSTOM_VERSION" --draft=false --latest

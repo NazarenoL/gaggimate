@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     # Only run for PRs opened by the repo owner; fork PRs get a read-only
     # GITHUB_TOKEN and can't publish to gh-pages.
-    if: github.event.pull_request.user.login == github.repository_owner
+    if: github.repository == 'jniebuhr/gaggimate' && github.event.pull_request.user.login == github.repository_owner
     permissions:
       contents: write
       pages: write

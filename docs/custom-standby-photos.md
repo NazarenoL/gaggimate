@@ -40,10 +40,10 @@ Replace the port with your actual display port. This uses PlatformIO's bootloade
 
 ## Publish subsequent OTA builds in your fork
 
-The new **Build custom firmware** workflow (`.github/workflows/custom-firmware.yml`) runs manually and needs only the fork's standard `GITHUB_TOKEN`, with contents-write permission. It does not require `UPDATE_SERVER_HOST` or `UPDATE_SERVER_API_KEY`, unlike the inherited official deployment workflows.
+The new **Build custom firmware** workflow (`.github/workflows/custom-firmware.yml`) builds automatically on pushes to `master` and pull requests targeting it, and can also run manually. Automatic builds upload downloadable firmware artifacts without publishing an OTA release. Manual runs with a version tag publish a release and need only the fork's standard `GITHUB_TOKEN`, with contents-write permission. It does not require `UPDATE_SERVER_HOST` or `UPDATE_SERVER_API_KEY`, unlike the inherited official deployment workflows.
 
 1. Put the workflow and changes on your fork's default branch and enable GitHub Actions if necessary.
-2. In Actions, select **Build custom firmware → Run workflow**. Enter a new tag such as `v1.9.2-photos1`, higher than the version installed on the machine. Use a distinct, unused tag each time. Avoid dots within the prerelease suffix because this firmware's version parser does not retain them.
+2. In Actions, select **Build custom firmware → Run workflow**. Enter a new tag such as `v1.9.2-custom1` to publish an OTA release (leave blank to build artifacts only), higher than the version installed on the machine. Use a distinct, unused tag each time. Avoid dots within the prerelease suffix because this firmware's version parser does not retain them.
 3. The workflow builds the embedded web UI, display and unchanged controller sources, archives the binaries and publishes a release in **this fork**, marked latest.
 4. In the machine's web UI, select **Settings → System → Stable** and check for updates. Choose **Update Display** for this feature. The controller image is available separately if a future change needs it.
 
@@ -60,4 +60,4 @@ OTA cannot change the bootloader or partition table. USB is still needed for ini
 - Empty, short and oversized API uploads were rejected without changing the saved photo.
 - Restarted the simulator and captured the real LVGL standby screen showing the corgi, clock, status icons and wake indicator.
 
-A physical display and OTA installation were not available for testing. The custom GitHub Actions workflow has been reviewed locally but has not run on GitHub.
+A physical display and OTA installation were not available for testing. GitHub build results and firmware artifacts are available under Actions → Build custom firmware.
