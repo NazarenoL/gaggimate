@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
 import { useBeans } from '../../services/beans.js';
 
-const emptyBean = { roaster: '', name: '', roastDate: '' };
+const emptyBean = { roaster: '', name: '' };
 
 export function Beans() {
   const { beans, request, busy, disabled, error } = useBeans();
@@ -32,17 +32,15 @@ export function Beans() {
       )}
       <form onSubmit={save} className='card bg-base-100 p-5'>
         <h3 className='mb-4 text-lg font-semibold'>{editingId ? 'Edit beans' : 'Add beans'}</h3>
-        <div className='grid gap-4 sm:grid-cols-3'>
-          {['roaster', 'name', 'roastDate'].map(field => (
+        <div className='grid gap-4 sm:grid-cols-2'>
+          {['roaster', 'name'].map(field => (
             <label key={field} className='flex flex-col gap-2'>
-              <span>
-                {field === 'roastDate' ? 'Roast date' : field === 'roaster' ? 'Roaster' : 'Name'}
-              </span>
+              <span>{field === 'roaster' ? 'Roaster' : 'Name'}</span>
               <input
                 className='input w-full'
-                type={field === 'roastDate' ? 'date' : 'text'}
+                type='text'
                 required
-                maxLength={field === 'roastDate' ? undefined : 100}
+                maxLength={100}
                 value={draft[field]}
                 disabled={disabled}
                 onInput={event => setDraft({ ...draft, [field]: event.target.value })}
@@ -70,9 +68,7 @@ export function Beans() {
           >
             <div className='flex-1'>
               <h3 className='font-semibold'>{bean.name}</h3>
-              <p className='text-base-content/70 text-sm'>
-                {bean.roaster} · Roasted {bean.roastDate}
-              </p>
+              <p className='text-base-content/70 text-sm'>{bean.roaster}</p>
               {bean.grindSetting != null && (
                 <p className='text-sm'>Last grind size: {Number(bean.grindSetting).toFixed(1)}</p>
               )}
@@ -83,7 +79,7 @@ export function Beans() {
               disabled={disabled}
               onClick={() => {
                 setEditingId(bean.id);
-                setDraft({ roaster: bean.roaster, name: bean.name, roastDate: bean.roastDate });
+                setDraft({ roaster: bean.roaster, name: bean.name });
               }}
             >
               Edit

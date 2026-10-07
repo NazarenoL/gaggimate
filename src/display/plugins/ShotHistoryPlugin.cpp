@@ -1150,9 +1150,19 @@ bool ShotHistoryPlugin::loadBeans(JsonDocument &state) {
         return true;
     }
     File file = LittleFS.open("/beans.json", "r");
-    return file && deserializeJson(state, file) == DeserializationError::Ok &&
-           state["beans"].is<JsonArray>() && state["selectedId"].is<String>() &&
-           state["nextId"].is<uint32_t>();
+    if (!file || deserializeJson(state, file) != DeserializationError::Ok ||
+        !state["beans"].is<JsonArray>() || !state["selectedId"].is<String>() ||
+        !state["nextId"].is<uint32_t>()) return false;
+    // Recover the selected bean's known value from older libraries on read.
+    if (state["lastGrindSetting"].isNull()) {
+        for (JsonObject bean : state["beans"].as<JsonArray>()) {
+            if (bean["id"].as<String>() == state["selectedId"].as<String>() && !bean["grindSetting"].isNull()) {
+                state["lastGrindSetting"] = bean["grindSetting"];
+                break;
+            }
+        }
+    }
+    return true;
 }
 
 bool ShotHistoryPlugin::saveBeans(const JsonDocument &state) {
@@ -1198,8 +1208,8 @@ void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &
         if (month == 2 && (year % 400 == 0 || (year % 4 == 0 && year % 100 != 0))) ++maxDay;
         validDate = validDate && year > 0 && day >= 1 && day <= maxDay;
         if (roaster.isEmpty() || name.isEmpty() || roaster.length() > 100 || name.length() > 100 ||
-            !validDate || (!id.isEmpty() && index < 0) || (index < 0 && beans.size() >= 100)) {
-            response["error"] = "Provide a roaster, name and valid roast date (maximum 100 beans)";
+            (!date.isEmpty() && !validDate) || (!id.isEmpty() && index < 0) || (index < 0 && beans.size() >= 100)) {
+            response["error"] = "Provide a roaster and name (maximum 100 beans); any legacy roast date must be valid";
             return;
         }
         JsonObject bean;
@@ -1214,7 +1224,8 @@ void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &
         }
         bean["roaster"] = roaster;
         bean["name"] = name;
-        bean["roastDate"] = date;
+        // New clients omit roastDate; preserve dates from existing libraries and old clients.
+        if (request["bean"].containsKey("roastDate")) bean["roastDate"] = date;
     } else if (type == "req:beans:delete") {
         if (index < 0) {
             response["error"] = "Bean not found";
@@ -1235,6 +1246,7 @@ void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &
                 return;
             }
             beans[index]["grindSetting"] = grind;
+            state["lastGrindSetting"] = grind;
         }
         state["selectedId"] = id;
     } else if (type != "req:beans:list") {
@@ -1247,4 +1259,5 @@ void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &
     }
     response["beans"] = beans;
     response["selectedId"] = state["selectedId"];
+    response["lastGrindSetting"] = state["lastGrindSetting"];
 }

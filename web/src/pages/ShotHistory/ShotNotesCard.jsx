@@ -255,9 +255,6 @@ export default function ShotNotesCard({ shot, onNotesUpdate, onNotesLoaded }) {
               {notes.beanType || '—'}
             </div>
           )}
-          {notes.bean?.roastDate && (
-            <p className='text-base-content/70 text-sm'>Roasted {notes.bean.roastDate}</p>
-          )}
         </div>
 
         {/* Dose In */}
