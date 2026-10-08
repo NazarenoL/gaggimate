@@ -31,6 +31,10 @@ static void clickBeanButton(const char *text) {
 }
 
 static int testBeanControls() {
+    controller.getUI()->changeScreen(SCREEN_ID_BREW_SCREEN);
+    controller.getUI()->loop();
+    controller.getUI()->loop();
+    assert(strcmp(lv_label_get_text(objects.obj6), "No bean selected") == 0);
     PluginManager events;
     BeanControls controls;
     controls.init(&controller, &events);
@@ -53,6 +57,10 @@ static int testBeanControls() {
     assert(library["recentIds"].size() == 10);
     assert(library["recentIds"][0].as<String>() == "12");
     library = beanRequest("req:beans:select", "2", 6.1);
+    controller.getUI()->loop();
+    assert(strcmp(lv_label_get_text(objects.obj6), "Bean 2") == 0);
+    assert(findBeanText(objects.profile_info, "Grind 6.1"));
+    assert(objects.profile_select_button && lv_obj_get_parent(objects.profile_select_button) != lv_obj_get_parent(objects.obj6));
     assert(library["recentIds"][0].as<String>() == "2");
     controls.openSelector();
     assert(findBeanText(lv_layer_top(), "Bean 2"));
@@ -64,6 +72,9 @@ static int testBeanControls() {
     assert(findBeanText(lv_layer_top(), "Bean 12"));
     clickBeanButton("Select");
     assert(beanRequest("req:beans:list")["selectedId"].as<String>() == "12");
+    controller.getUI()->loop();
+    assert(strcmp(lv_label_get_text(objects.obj6), "Bean 12") == 0);
+    assert(findBeanText(objects.profile_info, "Grind -"));
 
     // A different bean may be selected in the web UI while the previous shot finishes.
     events.trigger("beans:brew:finished", "id", String("2"));
@@ -127,6 +138,18 @@ static int testBeanControls() {
     clickBeanButton(LV_SYMBOL_LEFT);
     clickBeanButton("Save");
     assert(beanRequest("req:beans:list")["selectedId"].as<String>() == "4");
+    controller.getUI()->loop();
+    assert(strcmp(lv_label_get_text(objects.obj6), "Bean 4") == 0);
+    assert(findBeanText(objects.profile_info, "Grind 7.3"));
+    beanRequest("req:beans:grind", "4", 7.5);
+    controller.getUI()->loop();
+    assert(findBeanText(objects.profile_info, "Grind 7.5"));
+    controller.clear();
+    controller.getUI()->markDirty();
+    controller.getUI()->loop();
+    lv_refr_now(nullptr);
+    SdlDriver::getInstance()->pumpAndRender();
+    SdlDriver::getInstance()->screenshot("brew-bean-summary.bmp");
     controller.clear();
     controller.onFlush();
     assert(controller.isActive());
@@ -134,6 +157,32 @@ static int testBeanControls() {
     controller.deactivate();
     controller.getUI()->loop();
     assert(!findBeanText(lv_layer_top(), "Next grind?"));
+    controller.clear();
+    controller.getUI()->markDirty();
+    controller.getUI()->loop();
+    // Long names must leave the grind visible; deleting the selected bean clears the caption.
+    JsonDocument request, response;
+    request["tp"] = "req:beans:save";
+    request["bean"]["name"] = "A very long bean name that cannot fit inside the brew screen caption";
+    request["bean"]["roaster"] = "Test roaster";
+    ShotHistory.handleBeansRequest(request, response);
+    assert(response["error"].isNull());
+    String longId = response["beans"][response["beans"].size() - 1]["id"].as<String>();
+    beanRequest("req:beans:select", longId, 8.2);
+    controller.getUI()->loop();
+    lv_obj_update_layout(objects.profile_info);
+    auto *grindLabel = findBeanText(objects.profile_info, "Grind 8.2");
+    assert(grindLabel);
+    lv_area_t rowArea, grindArea;
+    lv_obj_get_coords(lv_obj_get_parent(objects.obj6), &rowArea);
+    lv_obj_get_coords(grindLabel, &grindArea);
+    assert(grindArea.x2 <= rowArea.x2);
+    lv_refr_now(nullptr);
+    SdlDriver::getInstance()->pumpAndRender();
+    SdlDriver::getInstance()->screenshot("brew-long-bean-summary.bmp");
+    beanRequest("req:beans:delete", longId);
+    controller.getUI()->loop();
+    assert(strcmp(lv_label_get_text(objects.obj6), "No bean selected") == 0);
     puts("PASS: recent ten, selection, saved default, adjustment, bounds, skip, deletion, menu, real brew and utility flush");
     return 0;
 }

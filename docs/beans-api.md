@@ -14,6 +14,12 @@ in increments of 0.1. Press **Save** after changing the grind size, before brewi
 Switching beans restores that bean's saved value. Removing the selected bean
 clears the selection. Controls are disabled during an active process.
 
+On the display's brew screen, the caption above the profile selector shows a
+small bean icon, the selected bean's name, and its saved grind setting. The
+profile selector still works as before. This caption updates after bean or grind
+changes from either the display or web UI. A bean without a saved value shows
+`Grind -`; an empty selection shows `No bean selected`.
+
 The library is stored on internal LittleFS as `/beans.json`, including when shot
 history is stored on an SD card. Changes write a temporary file before replacing
 the library, and report storage errors to the UI. Up to 100 entries are supported;

@@ -15,6 +15,7 @@ extern const lv_img_dsc_t img_bluetooth_alt_20x20;
 extern const lv_img_dsc_t img_check_40x40;
 extern const lv_img_dsc_t img_clock_40x40;
 extern const lv_img_dsc_t img_coffee_bean_80x80;
+extern const lv_img_dsc_t img_coffee_bean_24x24;
 extern const lv_img_dsc_t img_disk_30x30;
 extern const lv_img_dsc_t img_dropdown_bar_40x40;
 extern const lv_img_dsc_t img_equality_40x40;

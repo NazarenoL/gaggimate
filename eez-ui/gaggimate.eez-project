@@ -2105,7 +2105,7 @@
                           },
                           "group": "",
                           "groupIndex": 0,
-                          "text": "Selected profile",
+                          "text": "No bean selected",
                           "textType": "literal",
                           "longMode": "WRAP",
                           "recolor": false

@@ -6,6 +6,9 @@
 #include <display/core/process/Process.h>
 #include <display/core/zones.h>
 #include <display/util/StandbyPhoto.h>
+#include <display/util/PsramAllocator.h>
+#include <display/plugins/ShotHistoryPlugin.h>
+#include <display/ui/default/eez/images.h>
 #include <esp32-hal-psram.h>
 #ifndef GAGGIMATE_SIM // hardware panel drivers are device-only
 #include <display/drivers/AmoledDisplayDriver.h>
@@ -65,6 +68,7 @@ DefaultUI::DefaultUI(Controller *controller, Driver *driver, PluginManager *plug
 void DefaultUI::init() {
     profileManager = controller->getProfileManager();
     beanControls.init(controller, pluginManager);
+    pluginManager->on("beans:changed", [this](Event const &) { beanSummaryDirty = true; });
     auto triggerRender = [this](Event const &) { rerender = true; };
     pluginManager->on("boiler:currentTemperature:change", [=](Event const &event) {
         int newTemp = static_cast<int>(event.getFloat("value"));
@@ -278,8 +282,78 @@ void DefaultUI::loop() {
 
     ui_tick();
     beanControls.loop();
+    updateBeanSummary();
     updateStandbyPhoto();
     lv_task_handler();
+}
+
+void DefaultUI::updateBeanSummary() {
+    // Keep the profile dropdown and its name intact; only replace the caption above it.
+    if (!objects.obj6) {
+        // EEZ creates screens lazily and may delete their widgets when leaving them.
+        beanSummaryRow = beanSummaryIcon = beanSummaryGrind = nullptr;
+        beanSummaryTheme = -1;
+        beanSummaryDirty = true;
+        return;
+    }
+    if (!beanSummaryRow) {
+        lv_obj_t *caption = objects.obj6;
+        lv_obj_t *parent = lv_obj_get_parent(caption);
+        int index = lv_obj_get_index(caption);
+        beanSummaryRow = lv_obj_create(parent);
+        lv_obj_remove_style_all(beanSummaryRow);
+        lv_obj_set_size(beanSummaryRow, 340, 26);
+        lv_obj_clear_flag(beanSummaryRow, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(beanSummaryRow, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(beanSummaryRow, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_column(beanSummaryRow, 8, 0);
+        lv_obj_move_to_index(beanSummaryRow, index);
+
+        beanSummaryIcon = lv_img_create(beanSummaryRow);
+        lv_img_set_src(beanSummaryIcon, &img_coffee_bean_24x24);
+        lv_obj_set_style_img_recolor_opa(beanSummaryIcon, LV_OPA_COVER, 0);
+
+        lv_obj_set_parent(caption, beanSummaryRow);
+        lv_label_set_text(caption, ""); // Ellipsis requires mutable text, not EEZ's static literal.
+        lv_obj_set_flex_grow(caption, 1);
+        lv_obj_set_width(caption, 1);
+        lv_label_set_long_mode(caption, LV_LABEL_LONG_DOT);
+        beanSummaryGrind = lv_label_create(beanSummaryRow);
+        lv_obj_set_style_text_font(beanSummaryGrind, &lv_font_montserrat_18, 0);
+        lv_label_set_text(beanSummaryGrind, "");
+        lv_obj_update_layout(beanSummaryRow);
+    }
+    int theme = eez_flow_get_selected_theme_index();
+    if (beanSummaryTheme != theme) {
+        beanSummaryTheme = theme;
+        auto color = lv_color_hex(theme_colors[theme][0]);
+        lv_obj_set_style_img_recolor(beanSummaryIcon, color, 0);
+        lv_obj_set_style_text_color(beanSummaryGrind, color, 0);
+    }
+    if (!beanSummaryDirty.exchange(false)) return;
+    JsonDocument request(&psramAllocator), response(&psramAllocator);
+    request["tp"] = "req:beans:list";
+    ShotHistory.handleBeansRequest(request, response);
+    if (!response["error"].isNull()) {
+        lv_label_set_text(objects.obj6, "Beans unavailable");
+        lv_label_set_text(beanSummaryGrind, "");
+        return;
+    }
+    String selected = response["selectedId"].as<String>();
+    for (JsonObject bean : response["beans"].as<JsonArray>()) {
+        if (bean["id"].as<String>() != selected) continue;
+        char grindText[32];
+        if (bean["grindSetting"].isNull()) snprintf(grindText, sizeof(grindText), "Grind -");
+        else snprintf(grindText, sizeof(grindText), "Grind %.1f", bean["grindSetting"].as<double>());
+        lv_label_set_text(beanSummaryGrind, grindText);
+        // Resolve the remaining name width before applying ellipsis to long names.
+        lv_obj_update_layout(beanSummaryRow);
+        lv_label_set_text(objects.obj6, bean["name"].as<const char *>());
+        return;
+    }
+    lv_label_set_text(beanSummaryGrind, "");
+    lv_obj_update_layout(beanSummaryRow);
+    lv_label_set_text(objects.obj6, "No bean selected");
 }
 
 void DefaultUI::loopProfiles() {

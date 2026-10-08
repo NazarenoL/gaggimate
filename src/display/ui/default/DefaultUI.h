@@ -69,6 +69,10 @@ class DefaultUI {
 
   private:
     BeanControls beanControls;
+    void updateBeanSummary();
+    std::atomic<bool> beanSummaryDirty{true};
+    lv_obj_t *beanSummaryRow = nullptr, *beanSummaryIcon = nullptr, *beanSummaryGrind = nullptr;
+    int beanSummaryTheme = -1;
     void updateStandbyPhoto();
     lv_img_dsc_t standbyPhotoDescriptor{};
     uint8_t *standbyPhotoPixels = nullptr;

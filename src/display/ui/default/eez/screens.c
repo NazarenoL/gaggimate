@@ -1560,7 +1560,7 @@ void create_screen_brew_screen() {
                                         obj, lv_color_hex(theme_colors[eez_flow_get_selected_theme_index()][0]),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
                                     lv_obj_set_style_text_font(obj, &lv_font_montserrat_18, LV_PART_MAIN | LV_STATE_DEFAULT);
-                                    lv_label_set_text_static(obj, "Selected profile");
+                                    lv_label_set_text_static(obj, "No bean selected");
                                 }
                                 {
                                     lv_obj_t *obj = lv_obj_create(parent_obj);
