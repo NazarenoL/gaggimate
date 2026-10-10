@@ -4,6 +4,7 @@
 #include <display/ui/default/DefaultUI.h>
 #include <display/core/Controller.h>
 #include <display/core/PluginManager.h>
+#include <display/core/process/BrewProcess.h>
 #include <display/util/PsramAllocator.h>
 #include <display/plugins/ShotHistoryPlugin.h>
 #include <display/ui/default/eez/screens.h>
@@ -13,8 +14,19 @@ void BeanControls::init(Controller *owner, PluginManager *plugins) {
     controller = owner;
     plugins->on("beans:changed", [this](Event const &) { libraryChanged = true; });
     plugins->on("beans:brew:finished", [this](Event const &event) {
+        unsigned long durationMs = 0;
+        {
+            std::lock_guard<std::recursive_mutex> processGuard(controller->getProcessLock());
+            Process *last = controller->getLastProcess();
+            if (last && last->getType() == MODE_BREW) {
+                auto *brew = static_cast<BrewProcess *>(last);
+                unsigned long end = brew->processPhase == ProcessPhase::FINISHED ? brew->finished : millis();
+                durationMs = end - brew->processStarted;
+            }
+        }
         std::lock_guard<std::mutex> guard(pendingMutex);
         pendingBean = event.getString("id");
+        pendingBrewDurationMs = durationMs;
     });
     for (const char *event : {"controller:brew:start", "controller:mode:change", "ota:update:start", "controller:error"}) {
         plugins->on(event, [this](Event const &) { dismiss = true; });
@@ -100,13 +112,18 @@ void BeanControls::show(bool prompt) {
     title = label(prompt ? "Next grind?" : "Beans", 65, &lv_font_montserrat_34);
     name = label("", 125, &lv_font_montserrat_24);
     detail = label("", 185, &lv_font_montserrat_18);
+    if (prompt) {
+        char text[40];
+        snprintf(text, sizeof(text), "Last brew: %.1f s", brewDurationMs / 1000.0);
+        label(text, 215, &lv_font_montserrat_18);
+    }
     value = label("", 252, &lv_font_montserrat_34);
     lv_obj_set_width(value, 140);
     left = button(LV_SYMBOL_LEFT, -130, 245, 65);
     right = button(LV_SYMBOL_RIGHT, 130, 245, 65);
-    save = button(prompt ? "Save" : "Select", 0, 320, 160);
-    back = button(prompt ? "Skip" : "Back", 0, 390, 120);
-    message = label("", 215, &lv_font_montserrat_18);
+    save = button(prompt ? "Save" : "Select", 0, prompt ? 335 : 320, 160);
+    back = button(prompt ? "Skip" : "Back", 0, prompt ? 400 : 390, 120);
+    message = label("", prompt ? 300 : 215, &lv_font_montserrat_18);
     for (lv_obj_t *obj : {name, detail, message}) {
         lv_obj_set_height(obj, obj == name ? 56 : 26);
         lv_label_set_long_mode(obj, LV_LABEL_LONG_DOT);
@@ -172,6 +189,7 @@ void BeanControls::loop() {
     {
         std::lock_guard<std::mutex> guard(pendingMutex);
         pending = pendingBean;
+        brewDurationMs = pendingBrewDurationMs;
         pendingBean = "";
     }
     if (!pending.isEmpty() && !controller->isActive() && !controller->isErrorState() && controller->getMode() == MODE_BREW) {

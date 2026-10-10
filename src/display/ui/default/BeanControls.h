@@ -42,6 +42,7 @@ class BeanControls {
     lv_obj_t *back = nullptr, *message = nullptr;
     std::mutex pendingMutex;
     String pendingBean;
+    unsigned long pendingBrewDurationMs = 0, brewDurationMs = 0;
     std::atomic<bool> libraryChanged{false}, dismiss{false};
 };
 
