@@ -28,20 +28,26 @@ class BeanControls {
     void refresh();
     void close();
     void click(lv_obj_t *button);
+    void scanned(const String &code);
     static void onClick(lv_event_t *event);
     lv_obj_t *label(const char *text, int y, const lv_font_t *font);
     lv_obj_t *button(const char *text, int x, int y, int width);
+    lv_obj_t *iconButton(const lv_img_dsc_t *image, int x, int y);
 
     Controller *controller = nullptr;
     std::vector<Bean> beans;
     String selectedId, promptId;
     int preview = 0, grind = 10, fallbackGrind = 10;
     bool grindPrompt = false;
+    bool scanArmed = false;
+    String scanBeanId;
     lv_obj_t *overlay = nullptr, *title = nullptr, *name = nullptr, *detail = nullptr;
     lv_obj_t *value = nullptr, *left = nullptr, *right = nullptr, *save = nullptr;
     lv_obj_t *back = nullptr, *message = nullptr;
+    lv_obj_t *scan = nullptr, *scanCaption = nullptr;
     std::mutex pendingMutex;
     String pendingBean;
+    String pendingCode;
     unsigned long pendingBrewDurationMs = 0, brewDurationMs = 0;
     std::atomic<bool> libraryChanged{false}, dismiss{false};
 };

@@ -1,10 +1,12 @@
 #ifndef GAGGIMATE_CLIENT_H
 #define GAGGIMATE_CLIENT_H
 
+#include "BarcodeTransfer.h"
 #include "Endpoint.h"
 #include "GaggiMateComm.h"
 #include "ble/BleClientTransport.h"
 #include <Arduino.h>
+#include <atomic>
 #include <functional>
 
 // Display-side protocol facade: owns transport + Endpoint, exposes semantic sends and typed response callbacks.
@@ -25,6 +27,7 @@ class GaggiMateClient {
     using VolumetricCallback = std::function<void(float volume)>;
     using TofCallback = std::function<void(uint32_t distance)>;
     using ErrorCallback = std::function<void(int code)>;
+    using BarcodeCallback = std::function<void(uint32_t session, const String &code)>;
 
     GaggiMateClient();
 
@@ -71,6 +74,7 @@ class GaggiMateClient {
 
     // Commands (display -> controller)
     void sendPing();
+    void sendBarcodeControl(uint32_t session);
     void sendBoilerControl(uint8_t index, BoilerControlMode mode, float setpoint);
     void sendPumpControl(uint8_t index, PumpControlMode mode, float power, float pressure, float flow);
     void sendRelayControl(uint8_t index, bool open); // index 0 = brew valve, 1 = alt relay
@@ -101,6 +105,7 @@ class GaggiMateClient {
     void onVolumetricMeasurement(VolumetricCallback cb) { _volumetricCb = std::move(cb); }
     void onTofMeasurement(TofCallback cb) { _tofCb = std::move(cb); }
     void onError(ErrorCallback cb) { _errorCb = std::move(cb); }
+    void onBarcode(BarcodeCallback cb) { _barcodeCb = std::move(cb); }
 
   private:
     BleClientTransport _transport;
@@ -122,6 +127,9 @@ class GaggiMateClient {
     VolumetricCallback _volumetricCb;
     TofCallback _tofCb;
     ErrorCallback _errorCb;
+    BarcodeCallback _barcodeCb;
+    std::atomic<uint32_t> _barcodeSession{0};
+    BarcodeTransfer _barcodeTransfer;
 
     void registerHandlers();
 };

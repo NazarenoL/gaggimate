@@ -2,6 +2,7 @@
 #define GAGGIMATECONTROLLER_H
 #include "ControllerConfig.h"
 #include "GaggiMateServer.h"
+#include <peripherals/BarcodeScanner.h>
 #include <peripherals/DigitalInput.h>
 #include <peripherals/DistanceSensor.h>
 #include <peripherals/FlowSensor.h>
@@ -42,6 +43,7 @@ class GaggiMateController {
 
     ControllerConfig _config = ControllerConfig{};
     GaggiMateServer _comms;
+    BarcodeScanner barcodeScanner{_comms};
 
     TemperatureSensor *brewTemperature = nullptr;
     TemperatureSensor *steamTemperature = nullptr;

@@ -3,6 +3,7 @@
 #include <LittleFS.h>
 #include <SD_MMC.h>
 #include <cmath>
+#include <display/core/BarcodeReader.h>
 #include <display/core/Controller.h>
 #include <display/core/ProfileManager.h>
 #include <display/core/process/BrewProcess.h>
@@ -1185,8 +1186,14 @@ bool ShotHistoryPlugin::saveBeans(const JsonDocument &state) {
 }
 
 void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &response) {
-    std::unique_lock<std::mutex> guard(beansMutex);
     const String type = request["tp"].as<String>();
+    const bool scanning = type == "req:beans:scan" || type == "req:beans:code";
+    // Match the brew snapshot's process-before-library lock order. A scan must
+    // finish before a process starts, or be rejected once that process is active.
+    std::unique_lock<std::recursive_mutex> processGuard;
+    if (scanning && controller)
+        processGuard = std::unique_lock<std::recursive_mutex>(controller->getProcessLock());
+    std::unique_lock<std::mutex> guard(beansMutex);
     response["tp"] = "res:" + type.substring(4);
     response["rid"] = request["rid"];
     JsonDocument state(&psramAllocator);
@@ -1195,10 +1202,49 @@ void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &
         return;
     }
     JsonArray beans = state["beans"].as<JsonArray>();
-    const String id = request["id"] | "";
+    String id = request["id"] | "";
+    if (scanning && controller &&
+        (controller->getMode() == MODE_STANDBY || controller->isActive() || controller->isUpdating() ||
+         controller->isErrorState())) {
+        response["error"] = "Scanning is unavailable while the machine is in standby or busy";
+        return;
+    }
+    auto codeOwner = [&](const String &code) -> String {
+        for (JsonObject bean : beans) {
+            for (JsonVariant existing : bean["codes"].as<JsonArray>()) {
+                if (existing.as<String>() == code)
+                    return bean["id"].as<String>();
+            }
+        }
+        return "";
+    };
+    auto validCodeValue = [](JsonVariantConst value) {
+        // Arduino String conversion can truncate embedded NUL; validate the
+        // JSON string's full byte length before converting it for matching.
+        JsonString code = value.as<JsonString>();
+        return value.is<String>() && validBeanCode(std::string(code.c_str(), code.size()));
+    };
+    if (scanning) {
+        String code = request["code"] | "";
+        if (!validCodeValue(request["code"])) {
+            response["error"] = "Code must be 1–512 bytes without line breaks or NUL";
+            return;
+        }
+        if (type == "req:beans:scan") {
+            id = codeOwner(code);
+            if (id.isEmpty()) {
+                response["error"] = "Unknown code";
+                return;
+            }
+        } else if (!codeOwner(code).isEmpty() && codeOwner(code) != id) {
+            response["error"] = "Code already belongs to another bean";
+            return;
+        }
+    }
     int index = -1;
     for (size_t i = 0; i < beans.size(); ++i) {
-        if (beans[i]["id"].as<String>() == id) index = i;
+        if (beans[i]["id"].as<String>() == id)
+            index = i;
     }
     if (type == "req:beans:save") {
         String roaster = request["bean"]["roaster"] | "";
@@ -1208,14 +1254,16 @@ void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &
         name.trim();
         bool validDate = date.length() == 10 && date[4] == '-' && date[7] == '-';
         for (size_t i = 0; i < date.length(); ++i) {
-            if (i != 4 && i != 7 && (date[i] < '0' || date[i] > '9')) validDate = false;
+            if (i != 4 && i != 7 && (date[i] < '0' || date[i] > '9'))
+                validDate = false;
         }
         int year = date.substring(0, 4).toInt();
         int month = date.substring(5, 7).toInt();
         int day = date.substring(8, 10).toInt();
         const int days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
         int maxDay = month >= 1 && month <= 12 ? days[month - 1] : 0;
-        if (month == 2 && (year % 400 == 0 || (year % 4 == 0 && year % 100 != 0))) ++maxDay;
+        if (month == 2 && (year % 400 == 0 || (year % 4 == 0 && year % 100 != 0)))
+            ++maxDay;
         validDate = validDate && year > 0 && day >= 1 && day <= maxDay;
         if (roaster.isEmpty() || name.isEmpty() || roaster.length() > 100 || name.length() > 100 ||
             (!date.isEmpty() && !validDate) || (!id.isEmpty() && index < 0) || (index < 0 && beans.size() >= 100)) {
@@ -1223,6 +1271,27 @@ void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &
             return;
         }
         JsonObject bean;
+        if (request["bean"].containsKey("codes")) {
+            JsonVariant codes = request["bean"]["codes"];
+            if (!codes.is<JsonArray>() || codes.size() > MAX_BEAN_CODES) {
+                response["error"] = "Provide an array of up to 16 codes per bean";
+                return;
+            }
+            std::vector<String> seen;
+            for (JsonVariant value : codes.as<JsonArray>()) {
+                String code = value.as<String>();
+                if (!validCodeValue(value) || std::find(seen.begin(), seen.end(), code) != seen.end()) {
+                    response["error"] = "Codes must be unique strings of 1–512 bytes without line breaks or NUL";
+                    return;
+                }
+                String owner = codeOwner(code);
+                if (!owner.isEmpty() && owner != id) {
+                    response["error"] = "Code already belongs to another bean";
+                    return;
+                }
+                seen.push_back(code);
+            }
+        }
         if (index >= 0) {
             bean = beans[index].as<JsonObject>();
         } else {
@@ -1230,28 +1299,49 @@ void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &
             uint32_t nextId = state["nextId"] | 1;
             bean["id"] = String(nextId);
             state["nextId"] = nextId + 1;
-            if (state["selectedId"].as<String>().isEmpty()) state["selectedId"] = bean["id"];
+            if (state["selectedId"].as<String>().isEmpty())
+                state["selectedId"] = bean["id"];
         }
         bean["roaster"] = roaster;
         bean["name"] = name;
         // New clients omit roastDate; preserve dates from existing libraries and old clients.
-        if (request["bean"].containsKey("roastDate")) bean["roastDate"] = date;
+        if (request["bean"].containsKey("roastDate"))
+            bean["roastDate"] = date;
+        // Omission preserves codes for older clients; [] explicitly removes them.
+        if (request["bean"].containsKey("codes"))
+            bean["codes"] = request["bean"]["codes"];
+    } else if (type == "req:beans:code") {
+        if (index < 0) {
+            response["error"] = "Bean not found";
+            return;
+        }
+        String code = request["code"].as<String>();
+        if (codeOwner(code).isEmpty()) {
+            JsonArray codes =
+                beans[index]["codes"].isNull() ? beans[index]["codes"].to<JsonArray>() : beans[index]["codes"].as<JsonArray>();
+            if (codes.size() >= MAX_BEAN_CODES) {
+                response["error"] = "Maximum 16 codes per bean";
+                return;
+            }
+            codes.add(code);
+        }
     } else if (type == "req:beans:delete") {
         if (index < 0) {
             response["error"] = "Bean not found";
             return;
         }
         beans.remove(index);
-        if (state["selectedId"].as<String>() == id) state["selectedId"] = "";
-    } else if (type == "req:beans:select" || type == "req:beans:grind") {
+        if (state["selectedId"].as<String>() == id)
+            state["selectedId"] = "";
+    } else if (type == "req:beans:select" || type == "req:beans:grind" || type == "req:beans:scan") {
         if (index < 0 && (!id.isEmpty() || type == "req:beans:grind")) {
             response["error"] = "Bean not found";
             return;
         }
         if (request["grindSetting"].isNull() == false) {
             double grind = request["grindSetting"].as<double>();
-            if (index < 0 || !request["grindSetting"].is<double>() || !std::isfinite(grind) ||
-                grind < 1 || grind > 16 || std::abs(grind * 10 - std::round(grind * 10)) > 0.00001) {
+            if (index < 0 || !request["grindSetting"].is<double>() || !std::isfinite(grind) || grind < 1 || grind > 16 ||
+                std::abs(grind * 10 - std::round(grind * 10)) > 0.00001) {
                 response["error"] = "Grind size must be 1–16 in steps of 0.1";
                 return;
             }
@@ -1262,7 +1352,8 @@ void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &
             response["error"] = "Grind size is required";
             return;
         }
-        if (type == "req:beans:select") state["selectedId"] = id;
+        if (type == "req:beans:select" || type == "req:beans:scan")
+            state["selectedId"] = id;
     } else if (type != "req:beans:list") {
         response["error"] = "Unknown bean request";
         return;
@@ -1271,17 +1362,27 @@ void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &
     JsonDocument recent(&psramAllocator);
     JsonArray ids = recent.to<JsonArray>();
     auto addRecent = [&](const String &candidate) {
-        if (candidate.isEmpty() || ids.size() >= 10) return;
+        if (candidate.isEmpty() || ids.size() >= 10)
+            return;
         bool exists = false;
-        for (JsonObject bean : beans) if (bean["id"].as<String>() == candidate) exists = true;
-        for (JsonVariant value : ids) if (value.as<String>() == candidate) return;
-        if (exists) ids.add(candidate);
+        for (JsonObject bean : beans)
+            if (bean["id"].as<String>() == candidate)
+                exists = true;
+        for (JsonVariant value : ids)
+            if (value.as<String>() == candidate)
+                return;
+        if (exists)
+            ids.add(candidate);
     };
-    if (type == "req:beans:select") addRecent(id);
-    if (type == "req:beans:save" && id.isEmpty() && beans.size()) addRecent(beans[beans.size() - 1]["id"].as<String>());
-    for (JsonVariant value : state["recentIds"].as<JsonArray>()) addRecent(value.as<String>());
+    if (type == "req:beans:select" || type == "req:beans:scan")
+        addRecent(id);
+    if (type == "req:beans:save" && id.isEmpty() && beans.size())
+        addRecent(beans[beans.size() - 1]["id"].as<String>());
+    for (JsonVariant value : state["recentIds"].as<JsonArray>())
+        addRecent(value.as<String>());
     addRecent(state["selectedId"].as<String>());
-    for (size_t i = beans.size(); i > 0; --i) addRecent(beans[i - 1]["id"].as<String>());
+    for (size_t i = beans.size(); i > 0; --i)
+        addRecent(beans[i - 1]["id"].as<String>());
     state["recentIds"] = ids;
     if (type != "req:beans:list" && !saveBeans(state)) {
         response["error"] = "Could not save bean library";
@@ -1293,5 +1394,8 @@ void ShotHistoryPlugin::handleBeansRequest(JsonDocument &request, JsonDocument &
     response["recentIds"] = state["recentIds"];
     // Event listeners may read the library again; release the file lock first.
     guard.unlock();
-    if (type != "req:beans:list" && pluginManager) pluginManager->trigger("beans:changed");
+    if (processGuard.owns_lock())
+        processGuard.unlock();
+    if (type != "req:beans:list" && pluginManager)
+        pluginManager->trigger("beans:changed");
 }

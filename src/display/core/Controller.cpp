@@ -16,6 +16,7 @@
 #include <display/core/static_profiles.h>
 #include <display/core/zones.h>
 #include <display/plugins/AutoWakeupPlugin.h>
+#include <display/plugins/BarcodeScannerPlugin.h>
 #include <display/plugins/BoilerFillPlugin.h>
 #include <display/plugins/LedControlPlugin.h>
 #include <display/plugins/ShotHistoryPlugin.h>
@@ -101,6 +102,7 @@ void Controller::setup() {
     pluginManager->registerPlugin(new ImprovPlugin());
 #endif
     pluginManager->registerPlugin(&ShotHistory);
+    pluginManager->registerPlugin(new BarcodeScannerPlugin());
 #ifndef GAGGIMATE_SIM
     pluginManager->registerPlugin(&BLEScales);
 #endif
@@ -276,6 +278,13 @@ void Controller::setupBluetooth() {
         ESP_LOGV(LOG_TAG, "Button %d changed to %d", index, pressed);
         buttons.setConfig(buttonConfig()); // settings may have changed since the last edge
         buttons.onRawState(index, pressed, millis());
+    });
+    comms.onBarcode([this](uint32_t session, const String &code) {
+        Event event;
+        event.id = "controller:barcode";
+        event.setInt("session", static_cast<int>(session));
+        event.setString("code", code);
+        pluginManager->trigger(event);
     });
     comms.onError([this](int error) {
         // Autotune timeout = info-level, not runaway. Controller already
