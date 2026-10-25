@@ -1,4 +1,5 @@
 #include "GaggiMateServer.h"
+#include "BarcodeTransfer.h"
 #include <cstdio>
 #include <cstring>
 #include <esp_log.h>
@@ -10,6 +11,7 @@ void GaggiMateServer::init(const String &deviceName, const String &hardware, con
     setSystemInfo(hardware, version, capabilities);
     registerHandlers();
     _endpoint.onConnection([this](bool connected) {
+        setBarcodeSession(0);
         _sentSystemInfoAfterHandshake = false;
         if (connected)
             pushSystemInfo();
@@ -28,6 +30,7 @@ void GaggiMateServer::pumpTask(void *arg) {
     TickType_t lastWake = xTaskGetTickCount();
     for (;;) {
         self->_endpoint.loop();
+        self->pumpBarcode();
         xTaskDelayUntil(&lastWake, pdMS_TO_TICKS(15));
     }
 }
@@ -131,7 +134,47 @@ void GaggiMateServer::sendTofMeasurement(uint32_t distance) { _endpoint.sendUnre
 
 void GaggiMateServer::sendError(int code) { _endpoint.send(buildError(code)); }
 
+void GaggiMateServer::setBarcodeSession(uint32_t session) {
+    std::lock_guard<std::mutex> guard(_barcodeMutex);
+    _barcodeSession = session;
+    _barcodeCode.clear();
+    _barcodeOffset = 0;
+}
+
+void GaggiMateServer::sendBarcode(const std::string &code, uint32_t session) {
+    std::lock_guard<std::mutex> guard(_barcodeMutex);
+    if (!session || session != _barcodeSession.load() || !_endpoint.isConnected() || _transport.isUpdating() ||
+        !_barcodeCode.empty() || !validBeanCode(code))
+        return;
+    _barcodeCode = code;
+    _barcodeOffset = 0;
+    if (++_barcodeScanId == 0)
+        ++_barcodeScanId;
+}
+
+void GaggiMateServer::pumpBarcode() {
+    std::lock_guard<std::mutex> guard(_barcodeMutex);
+    if (_barcodeCode.empty() || !_barcodeSession.load() || !_endpoint.isConnected() || _transport.isUpdating() ||
+        !_endpoint.isIdle())
+        return;
+    gm::Payload p = gaggimate_Payload_init_zero;
+    p.which_content = gaggimate_Payload_barcode_fragment_tag;
+    auto &fragment = p.content.barcode_fragment;
+    fragment.session = _barcodeSession.load();
+    fragment.scan_id = _barcodeScanId;
+    fragment.offset = _barcodeOffset;
+    fragment.total = _barcodeCode.size();
+    fragment.data.size = std::min(BARCODE_FRAGMENT_BYTES, _barcodeCode.size() - _barcodeOffset);
+    memcpy(fragment.data.bytes, _barcodeCode.data() + _barcodeOffset, fragment.data.size);
+    _endpoint.send(p);
+    _barcodeOffset += fragment.data.size;
+    if (_barcodeOffset == _barcodeCode.size())
+        _barcodeCode.clear();
+}
+
 void GaggiMateServer::registerHandlers() {
+    _endpoint.on(gaggimate_Payload_barcode_control_tag,
+                 [this](const gm::Payload &p) { setBarcodeSession(p.content.barcode_control.session); });
     _endpoint.on(gaggimate_Payload_ping_tag, [this](const gm::Payload &) {
         // A SystemInfo notification sent synchronously from the BLE subscribe
         // callback can beat the client's notification handler. Once a ping has

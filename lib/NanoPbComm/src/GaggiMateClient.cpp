@@ -6,6 +6,8 @@ GaggiMateClient::GaggiMateClient() : _endpoint(_transport) {}
 void GaggiMateClient::init(const String &deviceName) {
     registerHandlers();
     _endpoint.onConnection([this](bool connected) {
+        _barcodeSession = 0;
+        _barcodeTransfer.reset();
         if (_connCb)
             _connCb(connected);
     });
@@ -145,6 +147,14 @@ gm::Payload GaggiMateClient::buildLedControl(const LedChannelCommand *channels, 
 
 void GaggiMateClient::sendPing() { _endpoint.send(buildPing()); }
 
+void GaggiMateClient::sendBarcodeControl(uint32_t session) {
+    _barcodeSession = session;
+    gm::Payload p = gaggimate_Payload_init_zero;
+    p.which_content = gaggimate_Payload_barcode_control_tag;
+    p.content.barcode_control.session = session;
+    _endpoint.send(p);
+}
+
 void GaggiMateClient::sendBoilerControl(uint8_t index, BoilerControlMode mode, float setpoint) {
     _endpoint.send(buildBoilerControl(index, mode, setpoint));
 }
@@ -178,6 +188,14 @@ void GaggiMateClient::sendLedControl(const LedChannelCommand *channels, size_t c
 }
 
 void GaggiMateClient::registerHandlers() {
+    _endpoint.on(gaggimate_Payload_barcode_fragment_tag, [this](const gm::Payload &p) {
+        const auto &fragment = p.content.barcode_fragment;
+        std::string code;
+        if (_barcodeTransfer.append(_barcodeSession.load(), fragment.session, fragment.scan_id, fragment.offset, fragment.total,
+                                    fragment.data.bytes, fragment.data.size, code) &&
+            _barcodeCb)
+            _barcodeCb(fragment.session, String(code.c_str()));
+    });
     _endpoint.on(gaggimate_Payload_system_info_tag, [this](const gm::Payload &p) {
         if (_systemInfoCb) {
             std::vector<uint32_t> addonList = {};

@@ -100,6 +100,7 @@ class Controller {
 
     // Event callback methods
     void updateLastAction();
+    void setBarcodeSession(uint32_t session) { comms.sendBarcodeControl(session); }
     void raiseTemp();
     void lowerTemp();
     void raiseSteamTemp();

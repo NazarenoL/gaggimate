@@ -291,6 +291,7 @@ void GaggiMateController::setup() {
         dimmedPump->tare();
     });
     ESP_LOGI(LOG_TAG, "Initialization done");
+    barcodeScanner.setup(_config.ext4Pin);
 }
 
 void GaggiMateController::loop() {
@@ -299,6 +300,7 @@ void GaggiMateController::loop() {
         handlePingTimeout();
     }
     sendSensorData();
+    barcodeScanner.loop(errorState == ERROR_CODE_NONE);
     if (_config.capabilites.ledControls && now - lastLedHealthCheck >= LED_HEALTH_CHECK_INTERVAL_MS) {
         lastLedHealthCheck = now;
         ledController->healthCheck();

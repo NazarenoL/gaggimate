@@ -48,6 +48,7 @@ class GaggiMateClient {
     using VolumetricCallback = std::function<void(float volume)>;
     using TofCallback = std::function<void(uint32_t distance)>;
     using ErrorCallback = std::function<void(int code)>;
+    using BarcodeCallback = std::function<void(uint32_t session, const String &code)>;
 
     GaggiMateClient();
 
@@ -81,6 +82,7 @@ class GaggiMateClient {
     gm::Payload buildLedControl(const LedChannelCommand *channels, size_t count);
 
     void sendPing();
+    void sendBarcodeControl(uint32_t session) { _barcodeSession = session; }
     void sendBoilerControl(uint8_t index, BoilerControlMode mode, float setpoint);
     void sendPumpControl(uint8_t index, PumpControlMode mode, float power, float pressure, float flow);
     void sendRelayControl(uint8_t index, bool open);
@@ -110,6 +112,16 @@ class GaggiMateClient {
     void onVolumetricMeasurement(VolumetricCallback cb) { _volumetricCb = std::move(cb); }
     void onTofMeasurement(TofCallback cb) { _tofCb = std::move(cb); }
     void onError(ErrorCallback cb) { _errorCb = std::move(cb); }
+    void onBarcode(BarcodeCallback cb) { _barcodeCb = std::move(cb); }
+    void simulateBarcode(const String &code) {
+        if (_barcodeCb)
+            _barcodeCb(_barcodeSession, code);
+    }
+    uint32_t simulatedBarcodeSession() const { return _barcodeSession; }
+    void simulateBarcode(uint32_t session, const String &code) {
+        if (_barcodeCb)
+            _barcodeCb(session, code);
+    }
 
   private:
     MockController _mock;
@@ -130,4 +142,6 @@ class GaggiMateClient {
     VolumetricCallback _volumetricCb;
     TofCallback _tofCb;
     ErrorCallback _errorCb;
+    BarcodeCallback _barcodeCb;
+    uint32_t _barcodeSession = 0;
 };

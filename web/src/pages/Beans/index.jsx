@@ -1,17 +1,19 @@
 import { useState } from 'preact/hooks';
 import { useBeans } from '../../services/beans.js';
 
-const emptyBean = { roaster: '', name: '' };
+const emptyBean = { roaster: '', name: '', codes: [] };
 
 export function Beans() {
   const { beans, request, busy, disabled, error } = useBeans();
   const [editingId, setEditingId] = useState('');
   const [draft, setDraft] = useState(emptyBean);
   const [deletingId, setDeletingId] = useState('');
+  const [codeDraft, setCodeDraft] = useState('');
 
   function reset() {
     setEditingId('');
     setDraft(emptyBean);
+    setCodeDraft('');
   }
 
   async function save(event) {
@@ -23,7 +25,8 @@ export function Beans() {
     <div className='mx-auto w-full max-w-4xl space-y-6'>
       <h2 className='text-3xl font-bold'>Beans</h2>
       <p className='text-base-content/70'>
-        Keep your beans here. Each bean remembers its last grind size for your next brew.
+        Keep your beans here. Each bean remembers its last grind size for your next brew. Link the
+        barcodes or QR codes on your bags to select beans with your scanner.
       </p>
       {error && (
         <div role='alert' className='alert alert-error'>
@@ -47,6 +50,58 @@ export function Beans() {
               />
             </label>
           ))}
+        </div>
+        <div className='mt-4 space-y-2'>
+          <label htmlFor='bean-code' className='block'>
+            Barcode / QR codes
+          </label>
+          <p className='text-base-content/70 text-sm'>
+            Add up to 16 codes per bean, or use Scan new code on the machine’s bean picker.
+          </p>
+          {draft.codes.map(code => (
+            <div key={code} className='flex items-center gap-2'>
+              <span className='min-w-0 flex-1 font-mono text-sm break-all'>{code}</span>
+              <button
+                className='btn btn-sm'
+                type='button'
+                disabled={disabled}
+                aria-label={`Remove code ${code}`}
+                onClick={() =>
+                  setDraft({ ...draft, codes: draft.codes.filter(value => value !== code) })
+                }
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <div className='flex gap-2'>
+            <input
+              id='bean-code'
+              className='input min-w-0 flex-1'
+              type='text'
+              value={codeDraft}
+              maxLength={512}
+              disabled={disabled || draft.codes.length >= 16}
+              placeholder='Barcode text or QR content'
+              onInput={event => setCodeDraft(event.target.value)}
+            />
+            <button
+              className='btn'
+              type='button'
+              disabled={
+                disabled ||
+                !codeDraft ||
+                draft.codes.length >= 16 ||
+                draft.codes.includes(codeDraft)
+              }
+              onClick={() => {
+                setDraft({ ...draft, codes: [...draft.codes, codeDraft] });
+                setCodeDraft('');
+              }}
+            >
+              Add code
+            </button>
+          </div>
         </div>
         <div className='mt-4 flex gap-2'>
           <button className='btn btn-primary' type='submit' disabled={disabled}>
@@ -72,6 +127,11 @@ export function Beans() {
               {bean.grindSetting != null && (
                 <p className='text-sm'>Last grind size: {Number(bean.grindSetting).toFixed(1)}</p>
               )}
+              {!!bean.codes?.length && (
+                <p className='text-sm'>
+                  {bean.codes.length} linked {bean.codes.length === 1 ? 'code' : 'codes'}
+                </p>
+              )}
             </div>
             <button
               type='button'
@@ -79,7 +139,8 @@ export function Beans() {
               disabled={disabled}
               onClick={() => {
                 setEditingId(bean.id);
-                setDraft({ roaster: bean.roaster, name: bean.name });
+                setDraft({ roaster: bean.roaster, name: bean.name, codes: bean.codes || [] });
+                setCodeDraft('');
               }}
             >
               Edit

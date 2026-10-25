@@ -44,6 +44,7 @@ message Payload {
         PressureScale pressure_scale = 9;
         Tare tare = 10;
         LedControl led = 11;
+        BarcodeControl barcode_control = 12;
 
         // Responses: controller -> display
         SystemInfo system_info = 20;
@@ -53,6 +54,7 @@ message Payload {
         VolumetricMeasurement volumetric = 24;
         TofMeasurement tof = 25;
         Error error = 26;
+        BarcodeFragment barcode_fragment = 27;
     }
 }
 
@@ -61,6 +63,21 @@ message Payload {
 // ---------------------------------------------------------------------------
 
 message Ping {}
+
+// A fresh nonzero session permits scanning while the display is awake and idle.
+// Zero cancels it. Replies echo the session so delayed scans cannot cross standby.
+message BarcodeControl {
+    uint32 session = 1;
+}
+
+// Small reliable fragments retain the existing BLE MTU and Payload union size.
+message BarcodeFragment {
+    uint32 session = 1;
+    uint32 scan_id = 2;
+    uint32 offset = 3;
+    uint32 total = 4;
+    bytes data = 5;
+}
 
 enum BoilerMode {
     BOILER_MODE_TEMPERATURE = 0; // `setpoint` is a target temperature in degC

@@ -5,7 +5,9 @@
 #include "GaggiMateComm.h"
 #include "ble/BleServerTransport.h"
 #include <Arduino.h>
+#include <atomic>
 #include <functional>
+#include <mutex>
 
 // Controller-side protocol facade: owns transport + Endpoint, exposes semantic sends and typed command callbacks;
 // pushes SystemInfo to the display on connect.
@@ -50,6 +52,9 @@ class GaggiMateServer {
     void sendVolumetricMeasurement(float volume);
     void sendTofMeasurement(uint32_t distance);
     void sendError(int code);
+    // Scanner packets use the existing link, one acknowledged fragment at a time.
+    uint32_t barcodeSession() const { return _barcodeSession.load(); }
+    void sendBarcode(const std::string &code, uint32_t session);
 
     // Drop the BLE link; the ping watchdog uses this so the display sees a real disconnect, not an in-band error.
     void disconnect() { _transport.disconnect(); }
@@ -96,6 +101,14 @@ class GaggiMateServer {
     PressureScaleCallback _pressureScaleCb;
     TareCallback _tareCb;
     LedCallback _ledCb;
+
+    std::atomic<uint32_t> _barcodeSession{0};
+    std::mutex _barcodeMutex;
+    std::string _barcodeCode;
+    size_t _barcodeOffset = 0;
+    uint32_t _barcodeScanId = 0;
+    void setBarcodeSession(uint32_t session);
+    void pumpBarcode();
 
     void registerHandlers();
     void pushSystemInfo();
