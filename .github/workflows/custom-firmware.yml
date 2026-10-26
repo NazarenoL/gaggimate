@@ -16,7 +16,10 @@ concurrency:
   group: custom-firmware-${{ github.ref }}-${{ inputs.version || 'ci' }}
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 jobs:
+  display-simulator:
+    uses: ./.github/workflows/display-simulator.yml
   build:
+    needs: display-simulator
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
