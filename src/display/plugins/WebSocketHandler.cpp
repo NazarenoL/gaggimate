@@ -98,15 +98,9 @@ void WebSocketHandler::setup(Controller *_controller, PluginManager *_pluginMana
         broadcastJson(doc);
     });
 
-    pluginManager->on("beans:changed", [this](Event const &) {
-        JsonDocument request(&psramAllocator), response(&psramAllocator);
-        request["tp"] = "req:beans:list";
-        ShotHistory.handleBeansRequest(request, response);
-        if (!response["error"].isNull()) return;
-        response.remove("rid");
-        response["tp"] = "evt:beans:changed";
-        broadcastJson(response);
-    });
+    // Listeners execute on the saving task. Re-reading the library here nests
+    // filesystem/JSON work inside the UI save and can exhaust its stack.
+    pluginManager->on("beans:changed", [this](Event const &) { beansChanged = true; });
 
     // Subscribe to Bluetooth scale weight updates
     pluginManager->on("controller:volumetric-measurement:bluetooth:change",
@@ -141,6 +135,8 @@ void WebSocketHandler::attach(AsyncWebServer &server) {
 }
 
 void WebSocketHandler::loop(unsigned long now) {
+    if (hasClients() && beansChanged.exchange(false))
+        publishBeans();
     if (now > lastStatus + STATUS_PERIOD && hasClients()) {
         lastStatus = now;
         publishState(now);
@@ -150,6 +146,17 @@ void WebSocketHandler::loop(unsigned long now) {
         lastCleanup = now;
         ws.cleanupClients();
     }
+}
+
+void WebSocketHandler::publishBeans() {
+    JsonDocument request(&psramAllocator), response(&psramAllocator);
+    request["tp"] = "req:beans:list";
+    ShotHistory.handleBeansRequest(request, response);
+    if (!response["error"].isNull())
+        return;
+    response.remove("rid");
+    response["tp"] = "evt:beans:changed";
+    broadcastJson(response);
 }
 
 void WebSocketHandler::handleWebSocketData(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg,

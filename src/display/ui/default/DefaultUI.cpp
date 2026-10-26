@@ -27,6 +27,9 @@
 static EffectManager effect_mgr;
 
 static constexpr uint32_t STARTUP_FADE_MS = 1000; // standby fade-in duration on power-up
+// Filesystem/JSON operations and flash IPC interrupts share the UI task's stack.
+// A field crash exhausted the previous configMINIMAL_STACK_SIZE * 6 allocation.
+static constexpr uint32_t UI_STACK_BYTES = 12 * 1024;
 
 static constexpr int32_t GAUGE_TICK_LONG = 25;      // meter tick length on most screens
 static constexpr int32_t GAUGE_TICK_SHORT = 10;     // shortened tick length on profile / new-menu screens
@@ -62,7 +65,7 @@ void DefaultUI::reloadProfiles() { profileLoaded = 0; }
 DefaultUI::DefaultUI(Controller *controller, Driver *driver, PluginManager *pluginManager)
     : controller(controller), panelDriver(driver), pluginManager(pluginManager) {
     setupPanel();
-    xTaskCreatePinnedToCore(loopTask, "DefaultUI::loop", configMINIMAL_STACK_SIZE * 6, this, 1, &taskHandle, 1);
+    xTaskCreatePinnedToCore(loopTask, "DefaultUI::loop", UI_STACK_BYTES, this, 1, &taskHandle, 1);
 }
 
 void DefaultUI::init() {

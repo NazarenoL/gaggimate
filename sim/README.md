@@ -56,7 +56,46 @@ IDE (CLion/VSCode) it shows up under the `display-sim` environment as the
 - **State** (settings, profiles, shot history) persists under `sim_data/`
   (git-ignored). Delete it to start fresh.
 
-## 3. How it works
+## 3. Regression tests
+
+After building, run `scripts/test_display_beans.sh`. It uses SDL's headless driver
+and a fresh temporary state directory, so it never changes your interactive
+simulator library. The suite exercises bean selection, post-brew grind saves,
+barcode registration, legacy JSON storage, and repeated touch-driven exits. It
+also checks that persistence waits for touch dispatch to return and WebSocket
+library reads wait for the web loop; reintroducing synchronous bean notifications
+fails even though the host has enough stack to survive them.
+
+For memory and undefined-behavior checks on Linux:
+
+```shell
+pio run -e display-sim-sanitized -j 2
+DISPLAY_SIM_ENV=display-sim-sanitized \
+  ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
+  UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+  scripts/test_display_beans.sh
+```
+
+Leak detection is disabled because the simulator does not tear down firmware
+globals/tasks at exit. UBSan alignment checks are also excluded: EEZ's generated
+assets use 4-byte ESP32 packing while the 64-bit host requires 8-byte alignment
+for some values. Other undefined behavior and invalid accesses still fail the
+run. `DISPLAY_SIM_TEST_DIR` optionally chooses where screenshots/state are saved.
+The custom firmware workflow runs **display-simulator / bean-regressions** on
+pushes to master, pull requests targeting master, and manual builds/releases.
+Firmware builds/releases depend on it passing.
+
+This is behavioral and host-memory coverage, not an ESP32 stack budget test.
+FreeRTOS tasks are no-ops here; host ABI, filesystems, flash IPC and interrupts
+differ. Compiler RAM/flash summaries cannot detect exhaustion of a task's stack.
+Changes to nested callbacks or storage paths still need a device test with
+`uxTaskGetStackHighWaterMark()` sampled after exercising them (ESP-IDF reports
+bytes). Exercise repeated bean confirmations and post-brew saves with a web
+client connected, then check minimum stack headroom, rather than only checking
+for a reboot. A future hardware CI runner can enforce that headroom; shrinking
+the desktop stack to the ESP32 allocation would not be a reliable substitute.
+
+## 4. How it works
 
 Everything simulator-only lives here in `sim/`; the firmware in `src/` is built
 unchanged except for a few small `#ifndef GAGGIMATE_SIM` guards.

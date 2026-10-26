@@ -1,0 +1,60 @@
+name: Display simulator
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  bean-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-display-sim-${{ hashFiles('platformio.ini') }}
+      - name: Install simulator dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libsdl2-dev
+          pip install platformio==6.2.0
+      - name: Build embedded web UI
+        run: scripts/build_webui.sh
+      - name: Test barcode framing and transfer
+        run: pio test -e native -f test_barcode_reader
+      - name: Build simulator with AddressSanitizer and UndefinedBehaviorSanitizer
+        run: pio run -e display-sim-sanitized -j 2
+      - name: Test bean selection, post-brew saves and legacy storage
+        env:
+          DISPLAY_SIM_ENV: display-sim-sanitized
+          DISPLAY_SIM_TEST_DIR: ${{ runner.temp }}/display-bean-tests
+          # The firmware's long-lived globals/tasks are not torn down on sim exit.
+          # Keep invalid access checks enabled; shutdown leaks need a separate suite.
+          ASAN_OPTIONS: detect_leaks=0:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          set -o pipefail
+          timeout 180s scripts/test_display_beans.sh 2>&1 | tee display-bean-tests.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: display-bean-tests-${{ github.run_number }}
+          path: |
+            display-bean-tests.log
+            ${{ runner.temp }}/display-bean-tests/*.bmp
+          if-no-files-found: ignore
+          retention-days: 14
