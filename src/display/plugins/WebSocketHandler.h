@@ -3,6 +3,7 @@
 
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
+#include <atomic>
 #include <display/util/PsramAllocator.h>
 #include <functional>
 
@@ -43,6 +44,7 @@ class WebSocketHandler {
     void handleFlushStop(uint32_t clientId, JsonDocument &request);
     void publishState(unsigned long now);
     void publishTelemetry();
+    void publishBeans();
     void sendAutotuneResult();
     void sendAutotuneFailed();
 
@@ -59,6 +61,7 @@ class WebSocketHandler {
     long lastCleanup = 0;
     AsyncWebSocketSharedBuffer lastStateBuffer; // last slow-state frame, replayed to new clients
     float currentBluetoothWeight = 0.0f;
+    std::atomic<bool> beansChanged{false};
     // Reused for every 500ms status broadcast. Allocating a fresh JsonDocument
     // each tick was a major contributor to internal-heap fragmentation
     // (device reports 33%+ fragmentation, causing AsyncTCP buffer allocs to

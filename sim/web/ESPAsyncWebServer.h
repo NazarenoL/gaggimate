@@ -203,6 +203,7 @@ class AsyncWebServer {
     void end();
 
     void pump(); // process pending sockets (called from gm_web_pump)
+    AsyncWebSocket *simulatedWebSocket() { return _ws; }
 
   private:
     using Route = AsyncCallbackWebHandler;

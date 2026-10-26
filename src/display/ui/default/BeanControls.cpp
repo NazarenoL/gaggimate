@@ -217,7 +217,9 @@ void BeanControls::close() {
     if (overlay)
         lv_obj_del(overlay);
     overlay = nullptr;
+    title = name = detail = value = left = right = save = message = nullptr;
     back = scan = scanCaption = nullptr;
+    pendingAction = PendingAction::NONE;
     scanArmed = false;
     scanBeanId = "";
 }
@@ -228,11 +230,12 @@ void BeanControls::onClick(lv_event_t *event) {
 
 void BeanControls::click(lv_obj_t *clicked) {
     if (clicked == back) {
-        close();
+        pendingAction = PendingAction::CLOSE;
         return;
     }
-    if (!grindPrompt && clicked == save && beans.empty()) {
-        close();
+    if (clicked == save) {
+        // Finish storage and widget deletion after LVGL's touch dispatch returns.
+        pendingAction = PendingAction::CONFIRM;
         return;
     }
     if (beans.empty())
@@ -252,21 +255,30 @@ void BeanControls::click(lv_obj_t *clicked) {
         else
             preview = std::clamp(preview + delta, 0, static_cast<int>(beans.size()) - 1);
         refresh();
-    } else if (clicked == save) {
-        JsonDocument request(&psramAllocator), response(&psramAllocator);
-        request["tp"] = grindPrompt ? "req:beans:grind" : "req:beans:select";
-        request["id"] = beans[preview].id;
-        if (grindPrompt)
-            request["grindSetting"] = grind / 10.0;
-        ShotHistory.handleBeansRequest(request, response);
-        if (!response["error"].isNull())
-            lv_label_set_text(message, response["error"].as<const char *>());
-        else {
-            bool selecting = !grindPrompt;
+    }
+}
+
+void BeanControls::confirm() {
+    if (!overlay)
+        return;
+    if (beans.empty()) {
+        if (!grindPrompt)
             close();
-            if (selecting)
-                controller->getUI()->changeScreen(SCREEN_ID_BREW_SCREEN);
-        }
+        return;
+    }
+    JsonDocument request(&psramAllocator), response(&psramAllocator);
+    request["tp"] = grindPrompt ? "req:beans:grind" : "req:beans:select";
+    request["id"] = beans[preview].id;
+    if (grindPrompt)
+        request["grindSetting"] = grind / 10.0;
+    ShotHistory.handleBeansRequest(request, response);
+    if (!response["error"].isNull())
+        lv_label_set_text(message, response["error"].as<const char *>());
+    else {
+        bool selecting = !grindPrompt;
+        close();
+        if (selecting)
+            controller->getUI()->changeScreen(SCREEN_ID_BREW_SCREEN);
     }
 }
 
@@ -335,6 +347,12 @@ void BeanControls::loop() {
     }
     if (!code.isEmpty())
         scanned(code);
+    PendingAction action = pendingAction;
+    pendingAction = PendingAction::NONE;
+    if (action == PendingAction::CLOSE)
+        close();
+    else if (action == PendingAction::CONFIRM)
+        confirm();
     if (libraryChanged.exchange(false) && overlay) {
         String previewId = beans.empty() ? "" : beans[preview].id;
         if (!loadLibrary()) {

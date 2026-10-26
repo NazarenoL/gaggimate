@@ -28,6 +28,7 @@ class BeanControls {
     void refresh();
     void close();
     void click(lv_obj_t *button);
+    void confirm();
     void scanned(const String &code);
     static void onClick(lv_event_t *event);
     lv_obj_t *label(const char *text, int y, const lv_font_t *font);
@@ -41,6 +42,8 @@ class BeanControls {
     bool grindPrompt = false;
     bool scanArmed = false;
     String scanBeanId;
+    enum class PendingAction { NONE, CONFIRM, CLOSE };
+    PendingAction pendingAction = PendingAction::NONE;
     lv_obj_t *overlay = nullptr, *title = nullptr, *name = nullptr, *detail = nullptr;
     lv_obj_t *value = nullptr, *left = nullptr, *right = nullptr, *save = nullptr;
     lv_obj_t *back = nullptr, *message = nullptr;
